@@ -37,7 +37,9 @@
     "dev": "remotion studio",
     "build": "remotion bundle",
     "upgrade": "remotion upgrade",
-    "lint": "eslint src && tsc"
+    "lint": "eslint src && tsc",
+    "check:codegraph-grid": "powershell -ExecutionPolicy Bypass -File ./scripts/check-codegraph-grid.ps1",
+    "check:grid-background-presets": "node ./scripts/check-grid-background-presets.mjs"
   },
   "sideEffects": [
     "*.css"

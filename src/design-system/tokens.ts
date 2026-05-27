@@ -23,6 +23,20 @@ export const COLORS = {
   error: '#FF3B30',
   info: '#5AC8FA',
 
+  // 扩展多彩色板 - 用于知识图谱和复杂展示
+  extended: {
+    orange: '#FF9500',
+    yellow: '#FFCC00',
+    green: '#34C759',
+    teal: '#5AC8FA',
+    cyan: '#32ADE6',
+    blue: '#007AFF',
+    indigo: '#5856D6',
+    purple: '#AF52DE',
+    pink: '#FF2D55',
+    red: '#FF3B30',
+  },
+
   // 渐变
   gradient: {
     primary: ['#007AFF', '#5856D6'],
@@ -82,4 +96,46 @@ export const STAGGER = {
   fast: 5,
   normal: 8,
   slow: 12,
+};
+
+// 竖屏专用字号（9:16 布局，增大字号提升可读性）
+export const PORTRAIT_SIZES = {
+  hero: 80,       // 主标题（增大）
+  h1: 60,         // 章节标题（增大）
+  h2: 42,         // 副标题（增大）
+  h3: 30,         // 功能标题（增大）
+  h4: 22,         // 描述文字（增大）
+  body: 18,       // 正文（增大）
+  caption: 14,    // 说明文字（增大）
+
+  // 竖屏间距（保持）
+  spacing: {
+    xs: 6,
+    sm: 12,
+    md: 18,
+    lg: 24,
+    xl: 36,
+    xxl: 48,
+    xxxl: 72,
+  },
+
+  // 竖屏圆角（保持）
+  radius: {
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 24,
+    xxl: 32,
+  },
+};
+
+// 竖屏布局尺寸
+export const PORTRAIT_LAYOUT = {
+  width: 1080,
+  height: 1920,
+  aspectRatio: 9 / 16,
+  contentWidth: 960,      // 内容区域宽度（留边距 60px）
+  contentPadding: 60,     // 左右内边距
+  safeAreaTop: 120,       // 顶部安全区域
+  safeAreaBottom: 200,    // 底部安全区域
 };

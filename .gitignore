@@ -5,3 +5,19 @@ dist
 
 # Ignore the output video from Git but not videos you import into src/.
 out
+
+# Generated media
+public/voiceover/
+public/screenshots/
+
+# CodeGraph index
+.codegraph/
+
+# Local Claude overrides (personal paths, local permissions)
+.claude/settings.local.json
+
+# Runtime lock file
+.claude/scheduled_tasks.lock
+
+# Codex agents (duplicate of .claude/skills)
+.agents/
