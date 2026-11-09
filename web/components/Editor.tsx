@@ -11,6 +11,7 @@ import { ExportDialog } from './ExportDialog';
 import { MatteDialog } from './MatteDialog';
 import { MotionDialog } from './MotionDialog';
 import { ImageMatteDialog } from './ImageMatteDialog';
+import { LocalAIDialog } from './LocalAIDialog';
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
@@ -24,6 +25,7 @@ export const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ pr
   const [toast, setToast] = useState<string | null>(null);
   const [matteAsset, setMatteAsset] = useState<Asset | null>(null);
   const [motionAsset, setMotionAsset] = useState<Asset | null>(null);
+  const [showLocalAI, setShowLocalAI] = useState(false);
   const saveTimer = useRef<number | null>(null);
 
   const flash = (msg: string) => {
@@ -225,6 +227,7 @@ export const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ pr
             onDelete={deleteAsset}
             onMatte={setMatteAsset}
             onLearnMotion={setMotionAsset}
+            onLocalAI={() => setShowLocalAI(true)}
             onUploaded={(p) => setProject((cur) => (cur ? { ...cur, assets: p.assets } : p))}
             onError={setError}
           />
@@ -246,6 +249,16 @@ export const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ pr
       {toast ? <div className="toast">{toast}</div> : null}
       {showSettings ? <SettingsDialog onClose={() => setShowSettings(false)} /> : null}
       {showExport ? <ExportDialog project={project} onClose={() => setShowExport(false)} /> : null}
+      {showLocalAI ? (
+        <LocalAIDialog
+          project={project}
+          onClose={() => setShowLocalAI(false)}
+          onStarted={(p) => {
+            setProject((cur) => (cur ? { ...cur, assets: p.assets } : p));
+            flash('Đã gửi sang ComfyUI. Theo dõi tiến độ trong Thư viện.');
+          }}
+        />
+      ) : null}
       {matteAsset && matteAsset.kind === 'image' ? (
         <ImageMatteDialog
           project={project}

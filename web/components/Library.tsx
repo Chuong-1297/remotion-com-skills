@@ -12,6 +12,7 @@ const modeLabel: Record<string, string> = {
   upload: 'Tải lên',
   matte: 'Tách nền',
   motion: 'Chuyển động',
+  comfy: 'AI trên máy',
 };
 
 interface Props {
@@ -24,6 +25,7 @@ interface Props {
   onDelete: (a: Asset) => void;
   onMatte: (a: Asset) => void;
   onLearnMotion: (a: Asset) => void;
+  onLocalAI: () => void;
   onUploaded: (p: Project) => void;
   onError: (msg: string) => void;
 }
@@ -75,6 +77,10 @@ export const Library: React.FC<Props> = (props) => {
             </button>
           ))}
         </div>
+        <span className="spacer" />
+        <button className="btn ghost" onClick={props.onLocalAI} title="Thay nhân vật / làm theo video bằng Wan Animate qua ComfyUI trên máy bạn">
+          <IconPerson /> AI trên máy
+        </button>
         <button className="btn ghost" onClick={() => fileRef.current && fileRef.current.click()} disabled={uploading}>
           <IconUpload /> {uploading ? 'Đang tải lên…' : 'Tải tệp lên'}
         </button>
@@ -115,7 +121,13 @@ const AssetCard: React.FC<{ asset: Asset } & Props> = ({ asset, onAddToScene, on
         {asset.status === 'pending' ? (
           <div className="asset-pending">
             <div className="spinner" />
-            <span>{asset.kind === 'image' ? 'Đang tạo ảnh…' : 'Đang tạo video… (1–3 phút)'}</span>
+            <span>
+              {asset.mode === 'comfy'
+                ? `Đang chạy trên ComfyUI… ${Math.round((asset.progress || 0) * 100)}%`
+                : asset.kind === 'image'
+                  ? 'Đang tạo ảnh…'
+                  : 'Đang tạo video… (1–3 phút)'}
+            </span>
           </div>
         ) : asset.status === 'error' ? (
           <div className="asset-error">

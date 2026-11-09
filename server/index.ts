@@ -9,6 +9,7 @@ import { bundle } from '@remotion/bundler';
 import { renderMedia, renderStill, selectComposition } from '@remotion/renderer';
 import type { Asset, AspectRatio, GenMode, Project, SceneClip } from '../src/flow/types';
 import { FPS, dimensionsFor } from '../src/flow/types';
+import { registerComfy } from './comfy';
 
 const ROOT = path.resolve(__dirname, '..');
 const DATA_DIR = path.join(ROOT, 'flow-data');
@@ -581,6 +582,19 @@ app.get(
     res.json(job);
   }),
 );
+
+// Local AI through ComfyUI (Wan 2.2 Animate and similar workflows).
+registerComfy(app, {
+  DATA_DIR,
+  MEDIA_DIR,
+  uid,
+  save,
+  getProject: getProject as never,
+  publicProject: publicProject as never,
+  mediaPath,
+  wrap: wrap as never,
+  errMessage,
+});
 
 // Serve the built web app in production.
 const WEB_DIST = path.join(ROOT, 'web', 'dist');

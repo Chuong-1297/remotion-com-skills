@@ -119,3 +119,22 @@ blender --background --python blender/build_character.py -- assets/characters/fl
 ```
 
 - **Nhân vật có sẵn từ nơi khác:** gắn khung xương (ví dụ bằng Mixamo), xuất GLB, rồi tải lên Thư viện của Flow Studio.
+
+## AI trên máy: thay nhân vật / làm theo video bằng Wan 2.2 Animate (miễn phí, thay cho Kling)
+
+Flow Studio gửi ảnh nhân vật, video mẫu và prompt sang **ComfyUI** chạy trên máy bạn, chờ chạy xong rồi đưa video kết quả về Thư viện. Mô hình gợi ý: **Wan 2.2 Animate** (Apache 2.0), có 2 kiểu: *Làm theo video* (nhân vật trong ảnh làm theo động tác, biểu cảm của video mẫu) và *Thay nhân vật* (thay người trong video bằng nhân vật của bạn).
+
+**Yêu cầu:** card NVIDIA, nên từ 16 GB VRAM (khoảng 24 GB cho bản đầy đủ; bản nén fp8/GGUF chạy được trên card nhỏ hơn nhưng chậm), còn trống vài chục GB ổ đĩa cho model.
+
+**Cài đặt (làm một lần):**
+1. Cài **ComfyUI** (bản Desktop, bản portable cho Windows, hoặc từ mã nguồn) và cập nhật lên bản mới nhất.
+2. Trong ComfyUI mở **Templates** và tìm mẫu **Wan 2.2 Animate**. Tải các model mà mẫu yêu cầu; nếu thiếu node thì dùng ComfyUI Manager → *Install Missing Custom Nodes*. Tên mẫu và vị trí model có thể thay đổi theo phiên bản ComfyUI; làm theo ghi chú đi kèm mẫu.
+3. Chạy thử mẫu với một ảnh và một video ngắn cho tới khi ra video.
+4. Chọn **Workflow → Export (API)** và lưu file `.json`.
+
+**Dùng trong Flow Studio:**
+1. Thư viện → **AI trên máy** → nhập địa chỉ ComfyUI (mặc định `http://127.0.0.1:8188`) → **Kiểm tra** (hiện tên GPU khi kết nối được).
+2. Chọn kiểu (*Làm theo video* / *Thay nhân vật*) rồi **Tải workflow (.json API)**. Flow Studio tự nhận ô nạp ảnh nhân vật, ô nạp video mẫu, prompt, prompt phủ định và seed; kiểm tra lại và chọn đúng nếu cần.
+3. Chọn ảnh nhân vật (nên dùng ảnh đã tách nền) và video mẫu trong Thư viện, viết mô tả nếu muốn, bấm **Tạo video**. Tiến độ hiện trên thẻ trong Thư viện; xong thì video nằm trong Thư viện để đưa vào cảnh.
+
+Mẹo: video mẫu ngắn (3–10 giây), thấy rõ một người; giảm độ phân giải trong workflow nếu card ít VRAM. ComfyUI chạy ở máy khác trong mạng LAN thì khởi động ComfyUI với `--listen` và nhập địa chỉ IP của máy đó (hoặc đặt biến môi trường `COMFYUI_URL`).

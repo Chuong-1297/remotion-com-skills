@@ -24,6 +24,33 @@ export interface GenerateBody {
   sourceAssetId?: string | null;
 }
 
+export interface NodeChoice {
+  node: string;
+  input: string;
+  label: string;
+}
+export interface WorkflowMapping {
+  image: { node: string; input: string } | null;
+  video: { node: string; input: string } | null;
+  prompt: { node: string; input: string } | null;
+  negative: { node: string; input: string } | null;
+  seed: { node: string; input: string } | null;
+}
+export interface WorkflowSummary {
+  id: string;
+  name: string;
+  mode: 'animate' | 'replace';
+  mapping: WorkflowMapping;
+  createdAt: number;
+  choices: { images: NodeChoice[]; videos: NodeChoice[]; texts: NodeChoice[]; seeds: NodeChoice[] };
+}
+export interface ComfyStatus {
+  ok: boolean;
+  url: string;
+  version?: string;
+  devices: Array<{ name?: string; type?: string; vramGB: number | null }>;
+}
+
 export interface RenderJob {
   id: string;
   status: 'rendering' | 'done' | 'error';
@@ -80,6 +107,15 @@ export const api = {
     id: string,
     body: { kind: 'video' | 'image' | 'motion' | 'character'; src: string; name: string; mode: 'matte' | 'motion' | 'upload'; duration?: number; thumb?: string | null; role?: 'base' | 'foreground' | 'motion'; pairId?: string; sourceAssetId?: string; model?: string },
   ) => call<Project>('POST', `/api/projects/${id}/assets`, body),
+  comfySettings: () => call<{ url: string }>('GET', '/api/comfy/settings'),
+  setComfySettings: (url: string) => call<{ url: string }>('PUT', '/api/comfy/settings', { url }),
+  comfyStatus: () => call<ComfyStatus>('GET', '/api/comfy/status'),
+  listWorkflows: () => call<WorkflowSummary[]>('GET', '/api/comfy/workflows'),
+  uploadWorkflow: (name: string, mode: 'animate' | 'replace', graph: unknown) => call<WorkflowSummary>('POST', '/api/comfy/workflows', { name, mode, graph }),
+  updateWorkflow: (id: string, patch: { name?: string; mode?: 'animate' | 'replace'; mapping?: Partial<WorkflowMapping> }) => call<WorkflowSummary>('PUT', `/api/comfy/workflows/${id}`, patch),
+  deleteWorkflow: (id: string) => call<{ ok: boolean }>('DELETE', `/api/comfy/workflows/${id}`),
+  runComfy: (id: string, body: { workflowId: string; imageAssetId: string; videoAssetId: string; prompt: string; negative?: string }) =>
+    call<Project>('POST', `/api/projects/${id}/comfy`, body),
   generate: (id: string, body: GenerateBody) => call<Project>('POST', `/api/projects/${id}/generate`, body),
   render: (id: string, height: number) => call<RenderJob>('POST', `/api/projects/${id}/render`, { height }),
   renderStatus: (jobId: string) => call<RenderJob>('GET', `/api/render/${jobId}`),

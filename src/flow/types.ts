@@ -108,7 +108,7 @@ export interface Asset {
   status: 'pending' | 'done' | 'error';
   src: string | null;
   prompt: string;
-  mode: GenMode | 'upload' | 'matte' | 'motion';
+  mode: GenMode | 'upload' | 'matte' | 'motion' | 'comfy';
   model: string;
   aspect: AspectRatio;
   durationSec: number;
@@ -120,6 +120,7 @@ export interface Asset {
   role?: AssetRole;
   pairId?: string | null; // links a matted foreground with its base
   sourceAssetId?: string | null;
+  progress?: number | null; // 0..1 while a local AI job runs
 }
 
 export interface Project {
