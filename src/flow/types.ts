@@ -48,6 +48,24 @@ export interface MotionData {
   source: string;
 }
 
+export type OverlayEnter = 'none' | 'fade' | 'pop' | 'slideLeft' | 'slideRight' | 'slideUp';
+export type OverlayIdle = 'none' | 'bob' | 'breathe' | 'sway';
+
+/** A cut-out character or sticker placed on top of a clip. Positions are fractions of the frame. */
+export interface Overlay {
+  id: string;
+  src: string;
+  x: number; // centre, 0..1 of width
+  y: number; // bottom edge, 0..1 of height
+  height: number; // fraction of frame height
+  rotation: number; // degrees
+  flip: boolean;
+  shadow: boolean;
+  brightness: number; // 0.5..1.5, to match the scene lighting
+  enter: OverlayEnter;
+  idle: OverlayIdle;
+}
+
 /** A clip on the scene-builder timeline. Times are in seconds. */
 export interface SceneClip {
   id: string;
@@ -68,6 +86,7 @@ export interface SceneClip {
   textBehind?: boolean; // draw the caption between base and foreground
   bg?: ClipBackground | null;
   pose?: PoseOptions | null;
+  overlays?: Overlay[];
 }
 
 export type GenMode = 'text' | 'frames' | 'ingredients' | 'extend' | 'image';
@@ -113,6 +132,19 @@ export const dimensionsFor = (aspect: AspectRatio, height = 720) => {
   return { width: Math.round((height * 16) / 9), height };
 };
 
+export const defaultOverlay = (id: string, src: string): Overlay => ({
+  id,
+  src,
+  x: 0.5,
+  y: 0.95,
+  height: 0.7,
+  rotation: 0,
+  flip: false,
+  shadow: true,
+  brightness: 1,
+  enter: 'pop',
+  idle: 'none',
+});
 export const defaultBackground = (): ClipBackground => ({ type: 'color', color: '#101418', src: null, mediaKind: null });
 export const defaultPose = (): PoseOptions => ({ style: 'character', color: '#f0a04b', mirror: false, cameraAngle: 0, characterSrc: null });
 

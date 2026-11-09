@@ -218,3 +218,14 @@ a { color: inherit; text-decoration: none; }
 .model-opt > span { display: flex; flex-direction: column; gap: 2px; }
 .pose-preview { width: 100%; border-radius: 10px; background: #000; margin: 8px 0; }
 .inspector h5 { display: flex; align-items: center; gap: 6px; }
+
+.matte-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.matte-compare figure { margin: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background-color: #0d0f12; display: flex; flex-direction: column; }
+.matte-compare img { width: 100%; height: 240px; object-fit: contain; display: block; }
+.matte-compare figcaption { font-size: 12px; color: var(--muted); padding: 6px 10px; background: var(--panel); }
+.matte-empty { height: 240px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
+.overlay-item { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; margin-top: 8px; }
+.overlay-item.open { border-color: var(--accent); }
+.overlay-head { display: flex; align-items: center; gap: 8px; background: none; border: none; padding: 0; font-weight: 600; font-size: 13px; }
+.overlay-head img { width: 34px; height: 34px; object-fit: contain; border-radius: 6px; }
+@media (max-width: 600px) { .matte-compare { grid-template-columns: 1fr; } }

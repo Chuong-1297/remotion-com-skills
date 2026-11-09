@@ -163,6 +163,11 @@ const AssetCard: React.FC<{ asset: Asset } & Props> = ({ asset, onAddToScene, on
               <button className="icon-btn" title="Dùng làm thành phần" onClick={() => onUseAsIngredient(asset)}>
                 <IconLayers size={16} />
               </button>
+              {asset.role !== 'foreground' ? (
+                <button className="icon-btn" title="Tách nền nhân vật trong ảnh" onClick={() => onMatte(asset)}>
+                  <IconScissors size={16} />
+                </button>
+              ) : null}
             </>
           ) : null}
           {asset.status === 'done' && asset.kind === 'video' ? (

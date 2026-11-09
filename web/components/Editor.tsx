@@ -10,6 +10,7 @@ import { SettingsDialog } from './SettingsDialog';
 import { ExportDialog } from './ExportDialog';
 import { MatteDialog } from './MatteDialog';
 import { MotionDialog } from './MotionDialog';
+import { ImageMatteDialog } from './ImageMatteDialog';
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
@@ -91,7 +92,7 @@ export const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ pr
     let duration = asset.durationSec;
     if (asset.kind === 'video') duration = (await probeVideoDuration(asset.src)) || asset.durationSec || 8;
     const timed = asset.kind !== 'image';
-    const isFg = asset.kind === 'video' && asset.role === 'foreground';
+    const isFg = (asset.kind === 'video' || asset.kind === 'image') && asset.role === 'foreground';
     const base = isFg && asset.pairId ? project.assets.find((a) => a.pairId === asset.pairId && a.role === 'base') : undefined;
     if (asset.kind === 'character') return;
     const clip: SceneClip = {
@@ -245,7 +246,15 @@ export const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ pr
       {toast ? <div className="toast">{toast}</div> : null}
       {showSettings ? <SettingsDialog onClose={() => setShowSettings(false)} /> : null}
       {showExport ? <ExportDialog project={project} onClose={() => setShowExport(false)} /> : null}
-      {matteAsset ? (
+      {matteAsset && matteAsset.kind === 'image' ? (
+        <ImageMatteDialog
+          project={project}
+          asset={matteAsset}
+          onClose={() => setMatteAsset(null)}
+          onDone={(p) => setProject((cur) => (cur ? { ...cur, assets: p.assets } : p))}
+        />
+      ) : null}
+      {matteAsset && matteAsset.kind === 'video' ? (
         <MatteDialog
           project={project}
           asset={matteAsset}

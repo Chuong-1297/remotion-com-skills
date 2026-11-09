@@ -16,12 +16,12 @@ import { wipe } from '@remotion/transitions/wipe';
 import { flip } from '@remotion/transitions/flip';
 import { clockWipe } from '@remotion/transitions/clock-wipe';
 import { iris } from '@remotion/transitions/iris';
-import { ClipBackground, FlowTimelineProps, KenBurns, SceneClip, TextOverlay, TransitionType, buildTimeline, defaultPose } from './types';
+import { ClipBackground, FlowTimelineProps, Overlay, KenBurns, SceneClip, TextOverlay, TransitionType, buildTimeline, defaultPose } from './types';
 import { PoseCharacter } from './PoseCharacter';
 
 const resolveSrc = (src: string, baseUrl: string) => (/^(https?:|data:|blob:)/.test(src) ? src : baseUrl + src);
 
-const KenBurnsImage: React.FC<{ src: string; mode: KenBurns }> = ({ src, mode }) => {
+const KenBurnsImage: React.FC<{ src: string; mode: KenBurns; transparent?: boolean; fit?: 'cover' | 'contain' }> = ({ src, mode, transparent, fit }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const p = interpolate(frame, [0, durationInFrames], [0, 1], {
@@ -34,8 +34,8 @@ const KenBurnsImage: React.FC<{ src: string; mode: KenBurns }> = ({ src, mode })
   if (mode === 'panLeft') transform = `scale(1.15) translateX(${interpolate(p, [0, 1], [5, -5])}%)`;
   if (mode === 'panRight') transform = `scale(1.15) translateX(${interpolate(p, [0, 1], [-5, 5])}%)`;
   return (
-    <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#000' }}>
-      <Img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', transform }} />
+    <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: transparent ? 'transparent' : '#000' }}>
+      <Img src={src} style={{ width: '100%', height: '100%', objectFit: fit || 'cover', transform }} />
     </AbsoluteFill>
   );
 };
@@ -91,6 +91,58 @@ const Caption: React.FC<{ text: TextOverlay }> = ({ text }) => {
   );
 };
 
+const OverlayItem: React.FC<{ o: Overlay; baseUrl: string }> = ({ o, baseUrl }) => {
+  const frame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+  const enter = spring({ frame: frame - 3, fps, config: { damping: 14, stiffness: 110 } });
+  let opacity = 1;
+  let dx = 0;
+  let dy = 0;
+  let scale = 1;
+  if (o.enter === 'fade') opacity = interpolate(frame, [0, 12], [0, 1], { extrapolateRight: 'clamp' });
+  if (o.enter === 'pop') {
+    scale = 0.6 + 0.4 * enter;
+    opacity = Math.min(1, enter * 2);
+  }
+  if (o.enter === 'slideLeft') dx = (1 - enter) * -width * 0.6;
+  if (o.enter === 'slideRight') dx = (1 - enter) * width * 0.6;
+  if (o.enter === 'slideUp') dy = (1 - enter) * height * 0.5;
+  let rot = o.rotation;
+  if (o.idle === 'bob') dy += Math.sin((frame / fps) * Math.PI * 1.2) * height * 0.012;
+  if (o.idle === 'breathe') scale *= 1 + Math.sin((frame / fps) * Math.PI * 0.8) * 0.015;
+  if (o.idle === 'sway') rot += Math.sin((frame / fps) * Math.PI * 0.9) * 3;
+  const h = o.height * height;
+  const filters = [`brightness(${o.brightness})`];
+  if (o.shadow) filters.push(`drop-shadow(0 ${h * 0.02}px ${h * 0.04}px rgba(0,0,0,0.55))`);
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: o.x * width,
+        top: o.y * height,
+        height: h,
+        transform: `translate(-50%, -100%) translate(${dx}px, ${dy}px) rotate(${rot}deg) scale(${scale})`,
+        transformOrigin: '50% 100%',
+        opacity,
+      }}
+    >
+      <Img
+        src={resolveSrc(o.src, baseUrl)}
+        style={{ height: '100%', width: 'auto', display: 'block', transform: o.flip ? 'scaleX(-1)' : undefined, filter: filters.join(' ') }}
+      />
+    </div>
+  );
+};
+
+const OverlayLayer: React.FC<{ overlays: Overlay[] | undefined; baseUrl: string }> = ({ overlays, baseUrl }) =>
+  overlays && overlays.length ? (
+    <AbsoluteFill>
+      {overlays.map((o) => (
+        <OverlayItem key={o.id} o={o} baseUrl={baseUrl} />
+      ))}
+    </AbsoluteFill>
+  ) : null;
+
 const BackgroundLayer: React.FC<{ bg: ClipBackground | null | undefined; baseUrl: string }> = ({ bg, baseUrl }) => {
   if (!bg || bg.type === 'none') return null;
   if (bg.type === 'color' || !bg.src) return <AbsoluteFill style={{ backgroundColor: bg.color }} />;
@@ -114,6 +166,7 @@ const ClipView: React.FC<{ clip: SceneClip; trimBefore: number; baseUrl: string 
       <AbsoluteFill style={{ backgroundColor: '#000' }}>
         <BackgroundLayer bg={clip.bg} baseUrl={baseUrl} />
         <PoseCharacter src={src} trimBeforeFrames={trimBefore} options={clip.pose || defaultPose()} baseUrl={baseUrl} />
+        <OverlayLayer overlays={clip.overlays} baseUrl={baseUrl} />
         {caption}
       </AbsoluteFill>
     );
@@ -142,6 +195,7 @@ const ClipView: React.FC<{ clip: SceneClip; trimBefore: number; baseUrl: string 
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         </AbsoluteFill>
+        <OverlayLayer overlays={clip.overlays} baseUrl={baseUrl} />
         {useBase ? null : caption}
       </AbsoluteFill>
     );
@@ -149,11 +203,13 @@ const ClipView: React.FC<{ clip: SceneClip; trimBefore: number; baseUrl: string 
 
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
+      {clip.kind === 'image' && clip.alpha ? <BackgroundLayer bg={clip.bg} baseUrl={baseUrl} /> : null}
       {clip.kind === 'video' ? (
         <OffthreadVideo src={src} trimBefore={trim} volume={clip.volume} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : (
-        <KenBurnsImage src={src} mode={clip.kenBurns} />
+        <KenBurnsImage src={src} mode={clip.kenBurns} transparent={clip.alpha} fit={clip.alpha ? 'contain' : 'cover'} />
       )}
+      <OverlayLayer overlays={clip.overlays} baseUrl={baseUrl} />
       {caption}
     </AbsoluteFill>
   );

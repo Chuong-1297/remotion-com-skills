@@ -4,6 +4,10 @@ import { FlowTimeline } from '../../src/flow/FlowTimeline';
 import {
   ClipBackground,
   FPS,
+  Overlay,
+  OverlayEnter,
+  OverlayIdle,
+  defaultOverlay,
   KenBurns,
   PoseOptions,
   PoseStyle,
@@ -51,6 +55,21 @@ const TEXT_POS: Array<[TextPosition, string]> = [
   ['top', 'Trên'],
   ['center', 'Giữa'],
   ['bottom', 'Dưới'],
+];
+
+const ENTERS: Array<[OverlayEnter, string]> = [
+  ['pop', 'Bật ra'],
+  ['fade', 'Hiện dần'],
+  ['slideLeft', 'Trượt từ trái'],
+  ['slideRight', 'Trượt từ phải'],
+  ['slideUp', 'Trồi lên'],
+  ['none', 'Có sẵn'],
+];
+const IDLES: Array<[OverlayIdle, string]> = [
+  ['none', 'Đứng yên'],
+  ['bob', 'Nhún nhẹ'],
+  ['breathe', 'Thở'],
+  ['sway', 'Lắc lư'],
 ];
 
 const POSE_STYLES: Array<[PoseStyle, string]> = [
@@ -137,6 +156,20 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
     const a = bgAssets.find((x) => x.src === bg.src);
     return a ? a.id : 'color';
   };
+  const [overlayId, setOverlayId] = useState<string | null>(null);
+  const overlayAssets = project.assets
+    .filter((a) => a.kind === 'image' && a.status === 'done' && a.src)
+    .sort((a, b) => (a.role === 'foreground' ? 0 : 1) - (b.role === 'foreground' ? 0 : 1));
+  const updateOverlay = (clipId: string, oid: string, patch: Partial<Overlay>) =>
+    setClips((cs) => cs.map((c) => (c.id === clipId ? { ...c, overlays: (c.overlays || []).map((o) => (o.id === oid ? { ...o, ...patch } : o)) } : c)));
+  const addOverlay = (clipId: string, src: string) => {
+    const o = defaultOverlay(newId(), src);
+    setClips((cs) => cs.map((c) => (c.id === clipId ? { ...c, overlays: [...(c.overlays || []), o] } : c)));
+    setOverlayId(o.id);
+  };
+  const removeOverlay = (clipId: string, oid: string) =>
+    setClips((cs) => cs.map((c) => (c.id === clipId ? { ...c, overlays: (c.overlays || []).filter((o) => o.id !== oid) } : c)));
+
   const thumbOf = (c: SceneClip) => {
     const a = c.assetId ? project.assets.find((x) => x.id === c.assetId) : undefined;
     return a && a.thumb ? a.thumb : null;
@@ -381,6 +414,67 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
                   )}
                 </section>
               ) : null}
+
+              <section>
+                <h5>
+                  <IconPerson size={12} /> Nhân vật đặt vào cảnh
+                </h5>
+                <label className="row between field-row">
+                  <span>Thêm nhân vật</span>
+                  <select
+                    className="select small"
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) addOverlay(selected.id, e.target.value);
+                    }}
+                  >
+                    <option value="">{overlayAssets.length ? 'Chọn ảnh…' : 'Chưa có ảnh'}</option>
+                    {overlayAssets.map((a) => (
+                      <option key={a.id} value={a.src!}>
+                        {a.role === 'foreground' ? '[Đã tách nền] ' : ''}
+                        {(a.prompt || a.id).replace(' (đã tách nền)', '').slice(0, 28)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {!overlayAssets.some((a) => a.role === 'foreground') ? (
+                  <div className="muted small">Mẹo: trong Thư viện, bấm nút kéo trên một ảnh để tách nền nhân vật trước.</div>
+                ) : null}
+                {(selected.overlays || []).map((o, i) => {
+                  const open = overlayId === o.id;
+                  return (
+                    <div key={o.id} className={`overlay-item ${open ? 'open' : ''}`}>
+                      <div className="row between">
+                        <button className="overlay-head" onClick={() => setOverlayId(open ? null : o.id)}>
+                          <img src={o.src} alt="" className="checker" /> Nhân vật {i + 1}
+                        </button>
+                        <button className="icon-btn danger" title="Bỏ nhân vật này" onClick={() => removeOverlay(selected.id, o.id)}>
+                          <IconTrash size={14} />
+                        </button>
+                      </div>
+                      {open ? (
+                        <>
+                          <Range label="Ngang" value={o.x} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => updateOverlay(selected.id, o.id, { x: v })} />
+                          <Range label="Dọc (chân)" value={o.y} min={0.1} max={1.2} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => updateOverlay(selected.id, o.id, { y: v })} />
+                          <Range label="Cao" value={o.height} min={0.1} max={1.5} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => updateOverlay(selected.id, o.id, { height: v })} />
+                          <Range label="Xoay" value={o.rotation} min={-45} max={45} step={1} fmt={(v) => `${v}°`} onChange={(v) => updateOverlay(selected.id, o.id, { rotation: v })} />
+                          <Range label="Độ sáng" value={o.brightness} min={0.5} max={1.5} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => updateOverlay(selected.id, o.id, { brightness: v })} />
+                          <Select label="Xuất hiện" value={o.enter} options={ENTERS} onChange={(v) => updateOverlay(selected.id, o.id, { enter: v })} />
+                          <Select label="Chuyển động" value={o.idle} options={IDLES} onChange={(v) => updateOverlay(selected.id, o.id, { idle: v })} />
+                          <label className="row between field-row">
+                            <span>Bóng đổ</span>
+                            <input type="checkbox" checked={o.shadow} onChange={(e) => updateOverlay(selected.id, o.id, { shadow: e.target.checked })} />
+                          </label>
+                          <label className="row between field-row">
+                            <span>Lật ngang</span>
+                            <input type="checkbox" checked={o.flip} onChange={(e) => updateOverlay(selected.id, o.id, { flip: e.target.checked })} />
+                          </label>
+                        </>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </section>
 
               <section>
                 <h5>Chuyển cảnh vào</h5>

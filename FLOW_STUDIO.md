@@ -27,6 +27,12 @@ Web app (giao diện tiếng Việt) theo quy trình kiểu "AI filmmaking": t�
 - Tạo 2 lớp: người/vật thể với nền trong suốt, và lớp nền gốc. Trên timeline: chọn nền mới (màu, ảnh, video) hoặc bật **Chữ nằm sau người**.
 - Cần Chrome/Edge bản mới trên máy có card đồ hoạ.
 
+**Tách nền ảnh và đặt nhân vật vào video**
+- Trên thẻ ảnh trong Thư viện, bấm nút kéo (Tách nền): Transformers.js chạy model **MODNet** (người) hoặc **BEN2** (mọi vật thể) ngay trong trình duyệt. Có card đồ hoạ thì dùng WebGPU, không có thì chạy bằng CPU. Lần đầu cần tải model từ huggingface.co.
+- Xem trước kết quả cạnh ảnh gốc, rồi lưu thành ảnh PNG nền trong suốt.
+- Trong Dựng cảnh, chọn một cảnh bất kỳ (video, ảnh, nhân vật 3D) → **Nhân vật đặt vào cảnh** → chọn ảnh đã tách nền. Chỉnh vị trí, chiều cao, xoay, độ sáng (cho hợp ánh sáng của cảnh), bóng đổ, lật ngang, hiệu ứng xuất hiện (bật ra, hiện dần, trượt vào, trồi lên) và chuyển động nhẹ (nhún, thở, lắc lư). Một cảnh đặt được nhiều nhân vật.
+- Ảnh đã tách nền cũng có thể làm cảnh chính, với nền thay thế (màu, ảnh hoặc video).
+
 **Học chuyển động → nhân vật 3D** (nút hình người trên thẻ video)
 - MediaPipe Pose đọc từng khung hình, ghi lại 33 khớp cơ thể của một người (chạy trong trình duyệt, miễn phí).
 - Clip "Chuyển động" trên timeline điều khiển nhân vật 3D dựng bằng three.js + `@remotion/three`: kiểu ma-nơ-canh / neon / khung dây, màu, góc máy, lật gương, nền phía sau.
