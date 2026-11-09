@@ -68,6 +68,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
 .bin-grid { padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; overflow: auto; align-content: start; }
 .media { position: relative; border-radius: 8px; overflow: hidden; aspect-ratio: 1; background: var(--deck-2); border: 1px solid var(--rule); }
 .media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.media .tag.r { left: auto; right: 5px; color: var(--paper); font-family: var(--font-code); }
 .media .tag { position: absolute; left: 5px; top: 5px; font-size: 10px; font-weight: 700; background: rgba(14,13,12,.75); color: var(--tungsten); padding: 1px 6px; border-radius: 99px; }
 .media .acts { position: absolute; inset: auto 0 0 0; display: flex; justify-content: space-between; padding: 4px; background: linear-gradient(transparent, rgba(0,0,0,.75)); opacity: 0; transition: opacity .15s; }
 .media:hover .acts, .media:focus-within .acts { opacity: 1; }
@@ -178,10 +179,10 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
     <button class="btn hot" id="exportBtn"><svg class="i"><use href="#i-down"/></svg>Xuất video</button>
   </header>
 
-  <aside class="panel bin" aria-label="Thư viện ảnh">
-    <div class="panel-h"><span class="eyebrow">Thư viện ảnh</span><span class="tc" id="mediaCount"></span></div>
-    <button class="drop" id="dropZone"><svg class="i"><use href="#i-up"/></svg>Tải ảnh lên</button>
-    <input type="file" id="fileIn" accept="image/*" multiple hidden>
+  <aside class="panel bin" aria-label="Thư viện">
+    <div class="panel-h"><span class="eyebrow">Thư viện</span><span class="tc" id="mediaCount"></span></div>
+    <button class="drop" id="dropZone"><svg class="i"><use href="#i-up"/></svg>Tải ảnh / video</button>
+    <input type="file" id="fileIn" accept="image/*,video/*" multiple hidden>
     <div class="bin-grid" id="binGrid"></div>
   </aside>
 
@@ -238,7 +239,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
           <button data-h="1080" aria-pressed="false">1080p</button>
         </div>
       </div>
-      <p>Video được ghi trực tiếp trong trình duyệt theo thời gian thực (mất đúng bằng độ dài video). Giữ tab này mở trong lúc ghi.</p>
+      <p>Video được ghi trực tiếp trong trình duyệt theo thời gian thực (mất đúng bằng độ dài video), kèm âm thanh của các clip và nhạc nền. Giữ tab này mở trong lúc ghi.</p>
     </div>
     <div id="exRun" hidden style="display:grid;gap:8px">
       <div class="bar"><div id="exBar"></div></div>
@@ -279,6 +280,18 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   const fmt = (s) => { s = Math.max(0, s); const m = Math.floor(s / 60); const r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1); };
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const opts = (list, val) => list.map(([v, l]) => `<option value="${v}"${v === val ? ' selected' : ''}>${l}</option>`).join('');
+  const idb = (() => {
+    let dbp = null;
+    const open = () => (dbp = dbp || new Promise((res, rej) => {
+      const r = indexedDB.open('flowStudio', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('blobs');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    }));
+    const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => {
+      const t = db.transaction('blobs', mode); const req = fn(t.objectStore('blobs'));
+      t.oncomplete = () => res(req && req.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); };
+    return { put: (k, v) => tx('readwrite', (st) => st.put(v, k)), get: (k) => tx('readonly', (st) => st.get(k)), del: (k) => tx('readwrite', (st) => st.delete(k)) };
+  })();
   function rng(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 
   // ---------- example images (procedural, marked "Mẫu") ----------
@@ -324,7 +337,8 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   const imgCache = {};
 
   const newScene = (mediaId, p = {}) => Object.assign({ id: uid(), mediaId, dur: 4, motion: 'zoomIn', filter: 'none', trans: 'fade', transDur: 0.6,
-    text: null }, p);
+    text: null, trimStart: 0, volume: 1 }, p);
+  const mediaById = (id) => state.media.find((m) => m.id === id) || null;
   const newText = (p = {}) => Object.assign({ content: '', pos: 'bottom', anim: 'rise', size: 64, color: '#ffffff', bg: false }, p);
 
   function exampleScenes() {
@@ -337,7 +351,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   }
 
   function loadImage(m) {
-    return new Promise((res) => { const im = new Image(); im.onload = () => { imgCache[m.id] = im; res(); }; im.onerror = () => res(); im.src = m.url; });
+    return new Promise((res) => { const im = new Image(); im.onload = () => { imgCache[m.id] = im; res(); }; im.onerror = () => res(); im.src = m.thumb || m.url; });
   }
 
   let saveT = 0, saveWarned = false;
@@ -345,7 +359,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
     clearTimeout(saveT);
     saveT = setTimeout(() => {
       try {
-        const data = { title: state.title, aspect: state.aspect, media: state.media.filter((m) => !m.example), scenes: state.scenes };
+        const data = { title: state.title, aspect: state.aspect, media: state.media.filter((m) => !m.example).map((m) => (m.kind === 'video' ? Object.assign({}, m, { url: null }) : m)), scenes: state.scenes };
         localStorage.setItem(STORE, JSON.stringify(data));
       } catch (e) {
         if (!saveWarned) { saveWarned = true; setStatus('Bộ nhớ trình duyệt đầy hoặc bị chặn: dự án chỉ giữ trong phiên này.', 'err'); }
@@ -403,7 +417,8 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   }
 
   function drawScene(g, s, lt, W, H, o) {
-    const im = imgCache[s.mediaId];
+    const m = mediaById(s.mediaId); let im = imgCache[s.mediaId];
+    if (m && m.kind === 'video') { const v = vidFor(s); if (v && v.el.readyState >= 2 && v.el.videoWidth) im = v.el; }
     g.save();
     if (o.clip) { g.beginPath(); g.rect(o.clip[0], o.clip[1], o.clip[2], o.clip[3]); g.clip(); }
     g.globalAlpha = o.alpha == null ? 1 : o.alpha;
@@ -421,8 +436,9 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
         case 'panDown': z = 1.14; oy = (p - 0.5) * 2 * a * H; break;
         case 'tilt': z = 1.15; rot = (p - 0.5) * 0.05; break;
       }
-      const cover = Math.max(W / im.width, H / im.height) * z;
-      const dw = im.width * cover, dh = im.height * cover;
+      const iw = im.videoWidth || im.width, ih = im.videoHeight || im.height;
+      const cover = Math.max(W / iw, H / ih) * z;
+      const dw = iw * cover, dh = ih * cover;
       g.save(); g.rotate(rot);
       const f = [FILTER_CSS[s.filter] || '', o.blur ? `blur(${o.blur}px)` : ''].join(' ').trim();
       g.filter = f || 'none';
@@ -459,6 +475,55 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
     } else drawScene(g, s, lt, W, H, {});
   }
 
+  // ---------- video + audio engine ----------
+  // One <video> per scene (so the same clip can appear twice), routed through Web Audio once the viewer interacts.
+  const vids = {}; let audio = null;
+  function vidFor(s) {
+    const m = mediaById(s.mediaId); if (!m || m.kind !== 'video' || !m.url) return null;
+    let v = vids[s.id]; if (v && v.src === m.url) return v; if (v) dropVid(s.id);
+    const el = document.createElement('video'); el.src = m.url; el.preload = 'auto'; el.playsInline = true; el.muted = !audio;
+    const redraw = () => { if (!playing && !recording) draw(); };
+    el.addEventListener('seeked', redraw); el.addEventListener('loadeddata', redraw);
+    v = vids[s.id] = { el, src: m.url, gain: null }; connectVid(v); return v;
+  }
+  function connectVid(v) {
+    if (!audio || v.gain) return;
+    try { const src = audio.ac.createMediaElementSource(v.el); const g = audio.ac.createGain(); src.connect(g); g.connect(audio.ac.destination); g.connect(audio.rec); v.gain = g; v.el.muted = false; } catch (e) { /* audio stays muted */ }
+  }
+  function dropVid(id) { const v = vids[id]; if (!v) return; v.el.pause(); if (v.gain) v.gain.disconnect(); v.el.removeAttribute('src'); v.el.load(); delete vids[id]; }
+  function pruneVids() { for (const id in vids) if (!state.scenes.some((s) => s.id === id && mediaById(s.mediaId) && mediaById(s.mediaId).url === vids[id].src)) dropVid(id); }
+  function connectMusic() {
+    if (!audio || !music || music.gain) return;
+    try { const src = audio.ac.createMediaElementSource(music.el); const g = audio.ac.createGain(); src.connect(g); g.connect(audio.ac.destination); g.connect(audio.rec); music.gain = g; } catch (e) { /* plays directly */ }
+  }
+  function ensureAudio() {
+    if (audio) { if (audio.ac.state === 'suspended') audio.ac.resume().catch(() => {}); return; }
+    try { const ac = new AudioContext(); audio = { ac, rec: ac.createMediaStreamDestination() }; Object.values(vids).forEach(connectVid); connectMusic(); } catch (e) { audio = null; }
+  }
+  function activeAt(t) {
+    const { items, total } = layout(); if (!state.scenes.length) return [];
+    t = clamp(t, 0, Math.max(0, total - 1e-3));
+    let i = 0; for (let j = 0; j < items.length; j++) if (items[j].start <= t) i = j;
+    const s = state.scenes[i], it = items[i], lt = t - it.start;
+    if (i > 0 && it.td > 0 && lt < it.td) { const p = ease(lt / it.td); return [{ s: state.scenes[i - 1], lt: t - items[i - 1].start, w: 1 - p }, { s, lt, w: p }]; }
+    const out = [{ s, lt, w: 1 }];
+    const nx = state.scenes[i + 1]; if (nx && items[i + 1].start - t < 1.2) out.push({ s: nx, lt: 0, w: 0, upcoming: true });
+    return out;
+  }
+  function syncVideos(t, run) {
+    const live = {};
+    activeAt(t).forEach((a) => {
+      const v = vidFor(a.s); if (!v) return; live[a.s.id] = 1;
+      const el = v.el, target = a.s.trimStart + a.lt;
+      if (v.gain) v.gain.gain.value = a.s.volume * a.w;
+      if (a.upcoming) { if (!el.paused) el.pause(); if (Math.abs(el.currentTime - a.s.trimStart) > 0.1) el.currentTime = a.s.trimStart; return; }
+      if (run) { if (Math.abs(el.currentTime - target) > 0.3) el.currentTime = target; if (el.paused && !el.ended) el.play().catch(() => {}); }
+      else { if (!el.paused) el.pause(); if (Math.abs(el.currentTime - target) > 0.04) el.currentTime = target; }
+    });
+    for (const id in vids) if (!live[id] && !vids[id].el.paused) vids[id].el.pause();
+  }
+  function pauseVideos() { for (const id in vids) vids[id].el.pause(); }
+
   // ---------- playback ----------
   let playing = false, playT = 0, lastTs = 0, raf = 0;
   function totalDur() { return layout().total; }
@@ -466,18 +531,18 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   function tick(ts) {
     if (!playing) return;
     playT += (ts - lastTs) / 1000; lastTs = ts;
-    if (playT >= totalDur()) { playT = totalDur(); pause(); }
-    draw(); raf = requestAnimationFrame(tick);
+    if (playT >= totalDur()) { playT = totalDur(); pause(); return draw(); }
+    syncVideos(playT, true); draw(); raf = requestAnimationFrame(tick);
   }
   function play() {
     if (!state.scenes.length) return;
     if (playT >= totalDur() - 0.05) playT = 0;
-    playing = true; lastTs = performance.now(); setPlayIcon();
+    ensureAudio(); playing = true; lastTs = performance.now(); setPlayIcon();
     if (music) { try { music.el.currentTime = playT; music.el.play().catch(() => {}); } catch (e) {} }
     raf = requestAnimationFrame(tick);
   }
-  function pause() { playing = false; cancelAnimationFrame(raf); setPlayIcon(); if (music) music.el.pause(); }
-  function seek(t) { playT = clamp(t, 0, totalDur()); if (music && playing) music.el.currentTime = playT; draw(); }
+  function pause() { playing = false; cancelAnimationFrame(raf); setPlayIcon(); if (music) music.el.pause(); pauseVideos(); }
+  function seek(t) { playT = clamp(t, 0, totalDur()); if (music && playing) music.el.currentTime = playT; if (!playing) syncVideos(playT, false); draw(); }
   function setPlayIcon() { $('playIco').setAttribute('href', playing ? '#i-pause' : '#i-play'); $('playBtn').setAttribute('aria-label', playing ? 'Tạm dừng' : 'Phát'); }
   function updateTransport() {
     const tot = totalDur();
@@ -496,11 +561,12 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
 
   // ---------- UI: media bin ----------
   function renderBin() {
-    $('mediaCount').textContent = state.media.length + ' ảnh';
+    $('mediaCount').textContent = state.media.length + ' tệp';
     $('binGrid').innerHTML = state.media.map((m, i) => `
       <div class="media" data-id="${m.id}">
-        <img src="${m.url}" alt="${esc(m.name)}">
+        <img src="${m.thumb || m.url}" alt="${esc(m.name)}">
         ${m.example ? '<span class="tag">Mẫu</span>' : `<span class="tag">#${i + 1}</span>`}
+        ${m.kind === 'video' ? `<span class="tag r">${fmt(m.duration)}</span>` : ''}
         <div class="acts">
           <button data-act="add" data-id="${m.id}"><svg class="i" style="width:12px;height:12px"><use href="#i-plus"/></svg>Thêm</button>
           <button class="x" data-act="rm" data-id="${m.id}" aria-label="Xoá ảnh"><svg class="i" style="width:12px;height:12px"><use href="#i-x"/></svg></button>
@@ -514,16 +580,16 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
     const { items, total } = layout();
     $('tlInfo').textContent = state.scenes.length ? `${state.scenes.length} cảnh · ${fmt(total)}` : '';
     const track = $('track');
-    if (!state.scenes.length) { track.innerHTML = '<div class="track-empty">Timeline trống. Bấm “Thêm” trên một ảnh, hoặc mô tả video ở dưới để Claude dựng giúp.</div>'; boxes = []; return; }
+    if (!state.scenes.length) { track.innerHTML = '<div class="track-empty">Timeline trống. Bấm “Thêm” trên một ảnh hoặc video, hoặc mô tả video ở dưới để Claude dựng giúp.</div>'; boxes = []; return; }
     let left = 12; boxes = [];
     track.innerHTML = state.scenes.map((s, i) => {
       const m = state.media.find((x) => x.id === s.mediaId);
       const w = Math.max(64, (s.dur - items[i].td) * PX);
       boxes.push({ left, w, from: items[i].start + items[i].td, to: items[i].start + s.dur }); left += w + 5;
       return `<button class="clip" draggable="true" data-id="${s.id}" aria-selected="${s.id === selectedId}" style="width:${w}px" title="Cảnh ${i + 1}">
-        ${m ? `<img src="${m.url}" alt="">` : ''}
+        ${m ? `<img src="${m.thumb || m.url}" alt="">` : ''}
         ${i > 0 && s.trans !== 'none' ? '<span class="tx"></span>' : ''}
-        <span class="num">${i + 1}</span><span class="meta">${s.dur.toFixed(1)}s${s.text && s.text.content ? ' · chữ' : ''}</span></button>`;
+        <span class="num">${i + 1}</span><span class="meta">${m && m.kind === 'video' ? 'video · ' : ''}${s.dur.toFixed(1)}s${s.text && s.text.content ? ' · chữ' : ''}</span></button>`;
     }).join('') + '<div class="playhead" id="playhead"></div>';
     placePlayhead();
   }
@@ -542,11 +608,19 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
     if (s) { $('mvL').disabled = idx <= 0; $('mvR').disabled = idx >= state.scenes.length - 1; }
     $('inspTitle').textContent = s ? `Cảnh ${idx + 1}` : 'Cảnh';
     if (!s) { $('inspBody').innerHTML = '<div class="empty-note">Chọn một cảnh trên timeline để chỉnh thời lượng, chuyển động, màu, chữ và chuyển cảnh.</div>'; return; }
-    const tx = s.text;
+    const tx = s.text; const m = mediaById(s.mediaId); const isVid = !!(m && m.kind === 'video');
+    $('inspTitle').textContent = `Cảnh ${idx + 1}${isVid ? ' · video' : ''}`;
     $('inspBody').innerHTML = `
       <section>
+        ${isVid ? `
+        <div class="rng"><div class="row"><span class="lbl">Bắt đầu từ giây</span><span class="tc" id="trimV">${s.trimStart.toFixed(1)}s</span></div>
+          <input type="range" id="f-trim" min="0" max="${Math.max(0, m.duration - 0.5).toFixed(1)}" step="0.1" value="${s.trimStart}"></div>
         <div class="rng"><div class="row"><span class="lbl">Thời lượng</span><span class="tc" id="durV">${s.dur.toFixed(1)}s</span></div>
-          <input type="range" id="f-dur" min="1" max="12" step="0.5" value="${s.dur}"></div>
+          <input type="range" id="f-dur" min="0.5" max="${Math.max(0.5, Math.min(30, m.duration - s.trimStart)).toFixed(1)}" step="0.1" value="${s.dur}"></div>
+        <div class="rng"><div class="row"><span class="lbl">Âm lượng</span><span class="tc" id="volV">${Math.round(s.volume * 100)}%</span></div>
+          <input type="range" id="f-vol" min="0" max="1" step="0.05" value="${s.volume}"></div>` : `
+        <div class="rng"><div class="row"><span class="lbl">Thời lượng</span><span class="tc" id="durV">${s.dur.toFixed(1)}s</span></div>
+          <input type="range" id="f-dur" min="1" max="12" step="0.5" value="${s.dur}"></div>`}
         <div class="row"><label for="f-motion">Chuyển động</label><select class="sel" id="f-motion">${opts(MOTIONS, s.motion)}</select></div>
         <div class="row"><label for="f-filter">Màu</label><select class="sel" id="f-filter">${opts(FILTERS, s.filter)}</select></div>
       </section>
@@ -572,13 +646,15 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   }
 
   function changed(opts2 = {}) {
-    save(); renderTrack(); if (opts2.insp) renderInsp(); draw();
+    pruneVids(); save(); renderTrack(); if (opts2.insp) renderInsp(); draw();
   }
 
   // inspector events (delegated)
   $('inspBody').addEventListener('input', (e) => {
     const s = sel(); if (!s) return; const t = e.target;
     if (t.id === 'f-dur') { s.dur = +t.value; $('durV').textContent = s.dur.toFixed(1) + 's'; }
+    else if (t.id === 'f-trim') { const m = mediaById(s.mediaId); s.trimStart = +t.value; s.dur = Math.min(s.dur, Math.max(0.5, m.duration - s.trimStart)); $('trimV').textContent = s.trimStart.toFixed(1) + 's'; $('durV').textContent = s.dur.toFixed(1) + 's'; changed(); seekToScene(state.scenes.indexOf(s), 0.05); return; }
+    else if (t.id === 'f-vol') { s.volume = +t.value; $('volV').textContent = Math.round(s.volume * 100) + '%'; }
     else if (t.id === 'f-td') { s.transDur = +t.value; $('tdV').textContent = s.transDur.toFixed(1) + 's'; }
     else if (t.id === 'f-text') s.text.content = t.value;
     else if (t.id === 'f-size') { s.text.size = +t.value; $('szV').textContent = t.value; }
@@ -588,6 +664,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   });
   $('inspBody').addEventListener('change', (e) => {
     const s = sel(); if (!s) return; const t = e.target;
+    if (t.id === 'f-trim') { renderInsp(); return; }
     if (t.id === 'f-motion') s.motion = t.value;
     else if (t.id === 'f-filter') s.filter = t.value;
     else if (t.id === 'f-trans') s.trans = t.value;
@@ -604,9 +681,9 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
     if (b.id === 'f-notext') { s.text = null; changed({ insp: true }); }
   });
 
-  function seekToScene(i) {
+  function seekToScene(i, at) {
     const { items } = layout(); if (!items[i]) return;
-    pause(); seek(items[i].start + items[i].td + 0.9);
+    pause(); seek(items[i].start + items[i].td + (at == null ? Math.min(0.9, state.scenes[i].dur * 0.4) : at));
   }
   function select(id) { selectedId = id; renderTrack(); renderInsp(); }
 
@@ -629,23 +706,49 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   // music (session only)
   $('musicIn').addEventListener('change', (e) => {
     const f = e.target.files && e.target.files[0]; if (!f) return;
-    if (music) { music.el.pause(); URL.revokeObjectURL(music.url); }
+    if (music) { music.el.pause(); if (music.gain) music.gain.disconnect(); URL.revokeObjectURL(music.url); }
     const url = URL.createObjectURL(f); const el = new Audio(url); el.preload = 'auto';
-    music = { name: f.name, url, el };
+    music = { name: f.name, url, el, gain: null }; connectMusic();
     $('musicLbl').textContent = f.name.length > 18 ? f.name.slice(0, 16) + '…' : f.name;
     setStatus('Đã thêm nhạc nền. Nhạc chỉ giữ trong phiên này và được trộn vào video khi xuất.', 'ok');
   });
 
   // ---------- events: media ----------
   async function addFiles(files) {
-    const list = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    const list = Array.from(files).filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
+    let added = 0, sessionOnly = false;
     for (const f of list) {
-      const url = await downscale(f, 1600, 0.86);
-      const m = { id: uid(), name: f.name, url, example: false };
-      state.media.push(m); await loadImage(m);
+      if (f.type.startsWith('image/')) {
+        const url = await downscale(f, 1600, 0.86);
+        const m = { id: uid(), kind: 'image', name: f.name, url, example: false };
+        state.media.push(m); await loadImage(m); added++; continue;
+      }
+      setStatus(`Đang đọc video ${f.name}…`);
+      const url = URL.createObjectURL(f);
+      let meta;
+      try { meta = await probeVideo(url); } catch (e) { URL.revokeObjectURL(url); setStatus(`Không đọc được video “${f.name}”. Trình duyệt này không hỗ trợ định dạng đó; thử MP4 (H.264) hoặc WebM.`, 'err'); continue; }
+      const m = { id: uid(), kind: 'video', name: f.name, url, thumb: meta.thumb, duration: meta.duration, w: meta.w, h: meta.h, example: false };
+      try { await idb.put(m.id, f); } catch (e) { sessionOnly = true; }
+      state.media.push(m); await loadImage(m); added++;
     }
     renderBin(); save();
-    if (list.length) setStatus(`Đã thêm ${list.length} ảnh. Bấm “Thêm” để đưa vào timeline, hoặc nhờ Claude dựng video từ ảnh.`, 'ok');
+    if (added) setStatus(`Đã thêm ${added} tệp. Bấm “Thêm” để đưa vào timeline, hoặc nhờ Claude dựng video.` + (sessionOnly ? ' Lưu ý: không lưu được video vào trình duyệt, video chỉ giữ trong phiên này.' : ''), 'ok');
+  }
+  function probeVideo(url) {
+    return new Promise((res, rej) => {
+      const el = document.createElement('video'); el.muted = true; el.preload = 'auto'; el.playsInline = true;
+      const to = setTimeout(() => rej(new Error('timeout')), 20000);
+      el.onloadedmetadata = () => { if (!isFinite(el.duration) || !el.videoWidth) { clearTimeout(to); return rej(new Error('meta')); } el.currentTime = Math.min(0.5, el.duration / 3); };
+      el.onseeked = () => {
+        clearTimeout(to);
+        const sc = Math.min(1, 640 / Math.max(el.videoWidth, el.videoHeight)); const c = document.createElement('canvas');
+        c.width = Math.round(el.videoWidth * sc); c.height = Math.round(el.videoHeight * sc); c.getContext('2d').drawImage(el, 0, 0, c.width, c.height);
+        res({ duration: el.duration, w: el.videoWidth, h: el.videoHeight, thumb: c.toDataURL('image/jpeg', 0.8) });
+        el.removeAttribute('src'); el.load();
+      };
+      el.onerror = () => { clearTimeout(to); rej(new Error('decode')); };
+      el.src = url;
+    });
   }
   function downscale(file, max, q) {
     return new Promise((res, rej) => {
@@ -669,9 +772,12 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
     const b = e.target.closest('button[data-act]'); if (!b) return;
     const id = b.dataset.id;
     if (b.dataset.act === 'add') {
-      const sc = newScene(id, { trans: state.scenes.length ? 'fade' : 'none' });
+      const mm = mediaById(id); const isV = mm && mm.kind === 'video';
+      const sc = newScene(id, Object.assign({ trans: state.scenes.length ? 'fade' : 'none' }, isV ? { motion: 'none', dur: Math.min(8, Math.max(0.5, mm.duration)) } : {}));
       state.scenes.push(sc); selectedId = sc.id; changed({ insp: true }); seekToScene(state.scenes.length - 1);
     } else if (b.dataset.act === 'rm') {
+      const gone = mediaById(id);
+      if (gone && gone.kind === 'video') { idb.del(id).catch(() => {}); if (gone.url) URL.revokeObjectURL(gone.url); }
       state.media = state.media.filter((m) => m.id !== id);
       state.scenes = state.scenes.filter((s) => s.mediaId !== id);
       if (!sel()) selectedId = null;
@@ -725,16 +831,16 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   }
 
   function buildPrompt(request, mediaForClaude, withImages) {
-    const media = mediaForClaude.map((m, i) => ({ index: i, name: m.name, size: (imgCache[m.id] ? imgCache[m.id].width + 'x' + imgCache[m.id].height : '?'), example: !!m.example }));
-    const current = state.scenes.map((s) => ({ media: mediaForClaude.findIndex((m) => m.id === s.mediaId), duration: s.dur, motion: s.motion, filter: s.filter,
+    const media = mediaForClaude.map((m, i) => (m.kind === 'video' ? { index: i, kind: 'video', name: m.name, size: m.w + 'x' + m.h, seconds: +m.duration.toFixed(1) } : { index: i, kind: 'image', name: m.name, size: (imgCache[m.id] ? imgCache[m.id].width + 'x' + imgCache[m.id].height : '?'), example: !!m.example }));
+    const current = state.scenes.map((s) => ({ media: mediaForClaude.findIndex((m) => m.id === s.mediaId), duration: s.dur, trimStart: s.trimStart, volume: s.volume, motion: s.motion, filter: s.filter,
       transition: s.trans, transitionDuration: s.transDur, text: s.text ? s.text.content : '', textPosition: s.text ? s.text.pos : 'bottom',
       textAnimation: s.text ? s.text.anim : 'fade', textSize: s.text ? s.text.size : 64, textColor: s.text ? s.text.color : '#ffffff', textBackground: s.text ? s.text.bg : false }));
-    return `Bạn là biên tập viên video. Ứng dụng dựng video từ ảnh tĩnh: mỗi cảnh là một ảnh có chuyển động máy, bộ lọc màu, chữ và chuyển cảnh.
+    return `Bạn là biên tập viên video. Ứng dụng dựng video từ ảnh tĩnh và video clip: mỗi cảnh là một ảnh hoặc một đoạn cắt từ video, có chuyển động máy, bộ lọc màu, chữ và chuyển cảnh.
 Dựa trên yêu cầu của người dùng, hãy tạo MỚI hoặc SỬA timeline hiện tại (nếu yêu cầu là chỉnh sửa thì giữ những gì không được nhắc tới).
 
-Danh sách ảnh (dùng "media" = index):
+Danh sách tệp (dùng "media" = index; kind "video" có seconds = độ dài):
 ${JSON.stringify(media)}
-${withImages ? 'Các ảnh đính kèm theo đúng thứ tự index ở trên; hãy nhìn nội dung ảnh để chọn thứ tự, chuyển động và viết chữ phù hợp.' : 'Không có ảnh đính kèm; chỉ dựa vào tên ảnh.'}
+${withImages ? 'Các ảnh đính kèm theo đúng thứ tự index ở trên (với video là một khung hình đại diện); hãy nhìn nội dung để chọn thứ tự, chuyển động và viết chữ phù hợp.' : 'Không có ảnh đính kèm; chỉ dựa vào tên ảnh.'}
 
 Timeline hiện tại (${state.aspect}):
 ${JSON.stringify(current)}
@@ -743,10 +849,10 @@ Yêu cầu của người dùng: """${request}"""
 
 Trả về DUY NHẤT một đối tượng JSON theo dạng:
 {"title": string, "aspect": "16:9"|"9:16", "note": string (1-2 câu tiếng Việt tóm tắt bạn đã làm gì),
- "scenes": [{"media": number, "duration": number (1-12 giây), "motion": ${JSON.stringify(keys(MOTIONS))}, "filter": ${JSON.stringify(keys(FILTERS))},
+ "scenes": [{"media": number, "duration": number (ảnh 1-12 giây; video tối đa seconds - trimStart), "trimStart": number (chỉ video: giây bắt đầu cắt, ảnh = 0), "volume": number (0-1, âm thanh của video), "motion": ${JSON.stringify(keys(MOTIONS))}, "filter": ${JSON.stringify(keys(FILTERS))},
    "transition": ${JSON.stringify(keys(TRANS))}, "transitionDuration": number (0.2-1.6), "text": string ("" nếu không có chữ, tối đa ~60 ký tự, ngôn ngữ theo người dùng),
    "textPosition": ${JSON.stringify(keys(TPOS))}, "textAnimation": ${JSON.stringify(keys(TANIM))}, "textSize": number (28-150, mặc định 64), "textColor": "#rrggbb", "textBackground": boolean}]}
-Quy tắc: chỉ dùng index ảnh có thật; một ảnh có thể dùng nhiều lần; cảnh đầu tiên dùng transition "none"; tổng thời lượng bám theo yêu cầu (mặc định 15-25 giây); không dùng emoji.`;
+Quy tắc: chỉ dùng index có thật; một tệp có thể dùng nhiều lần (video có thể cắt nhiều đoạn khác nhau); với video thường dùng motion "none"; cảnh đầu tiên dùng transition "none"; tổng thời lượng bám theo yêu cầu (mặc định 15-25 giây); không dùng emoji.`;
   }
 
   function sanitize(res, mediaForClaude) {
@@ -755,8 +861,11 @@ Quy tắc: chỉ dùng index ảnh có thật; một ảnh có thể dùng nhi�
     const scenes = res.scenes.slice(0, 40).map((r, i) => {
       const mi = clamp(Math.round(Number(r.media) || 0), 0, mediaForClaude.length - 1);
       const txt = typeof r.text === 'string' ? r.text.trim().slice(0, 160) : '';
-      return newScene(mediaForClaude[mi].id, {
-        dur: clamp(Number(r.duration) || 4, 1, 12), motion: pick(r.motion, MOTIONS, 'zoomIn'), filter: pick(r.filter, FILTERS, 'none'),
+      const mm = mediaForClaude[mi]; const isV = mm.kind === 'video';
+      const trim = isV ? clamp(Number(r.trimStart) || 0, 0, Math.max(0, mm.duration - 0.5)) : 0;
+      return newScene(mm.id, {
+        trimStart: trim, volume: clamp(r.volume == null ? 1 : Number(r.volume) || 0, 0, 1),
+        dur: isV ? clamp(Number(r.duration) || 4, 0.5, Math.max(0.5, Math.min(30, mm.duration - trim))) : clamp(Number(r.duration) || 4, 1, 12), motion: pick(r.motion, MOTIONS, 'zoomIn'), filter: pick(r.filter, FILTERS, 'none'),
         trans: i === 0 ? 'none' : pick(r.transition, TRANS, 'fade'), transDur: clamp(Number(r.transitionDuration) || 0.6, 0.2, 1.6),
         text: txt ? newText({ content: txt, pos: pick(r.textPosition, TPOS, 'bottom'), anim: pick(r.textAnimation, TANIM, 'rise'),
           size: clamp(Math.round(Number(r.textSize) || 64), 28, 150), color: /^#[0-9a-f]{6}$/i.test(r.textColor || '') ? r.textColor : '#ffffff', bg: !!r.textBackground }) : null,
@@ -771,7 +880,7 @@ Quy tắc: chỉ dùng index ảnh có thật; một ảnh có thể dùng nhi�
     const request = $('promptIn').value.trim();
     if (genBusy) return;
     if (!request) { setStatus('Hãy mô tả video bạn muốn trước.', 'err'); $('promptIn').focus(); return; }
-    if (!state.media.length) { setStatus('Thư viện chưa có ảnh nào. Tải ảnh lên trước.', 'err'); return; }
+    if (!state.media.length) { setStatus('Thư viện chưa có tệp nào. Tải ảnh hoặc video lên trước.', 'err'); return; }
     const sample = await getSample();
     if (!sample) { setStatus('Claude không khả dụng ở chế độ xem này (cần mở trang khi đã đăng nhập claude.ai). Bạn vẫn có thể dựng tay.', 'err'); return; }
     genBusy = true; $('genBtn').disabled = true; pause();
@@ -837,27 +946,23 @@ Quy tắc: chỉ dùng index ảnh có thật; một ảnh có thể dùng nhi�
     cv.width = portrait ? H : W; cv.height = portrait ? W : H;
     $('exSetup').hidden = true; $('exRun').hidden = false; $('exStart').hidden = true; $('exClose').textContent = 'Huỷ';
     recording = true; exCancel = false;
+    ensureAudio();
     const stream = cv.captureStream(30);
-    let ac = null, audioEl = null;
-    if (music) {
-      try {
-        ac = new AudioContext(); audioEl = new Audio(music.url);
-        const src = ac.createMediaElementSource(audioEl); const dest = ac.createMediaStreamDestination(); src.connect(dest);
-        dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
-      } catch (e) { ac = null; audioEl = null; }
-    }
+    const hasAudio = !!(audio && (music || state.scenes.some((s) => { const m = mediaById(s.mediaId); return m && m.kind === 'video' && s.volume > 0; })));
+    if (hasAudio) audio.rec.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+    syncVideos(0, false); await new Promise((r) => setTimeout(r, 500));
     const rec = new MediaRecorder(stream, Object.assign({ videoBitsPerSecond: H >= 1080 ? 10e6 : 6e6 }, mime ? { mimeType: mime } : {}));
     const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     const done = new Promise((r) => (rec.onstop = r));
     const total = totalDur();
     renderAt(ctx, 0, cv.width, cv.height);
     rec.start(250);
-    if (audioEl) { audioEl.currentTime = 0; audioEl.play().catch(() => {}); }
+    if (music) { music.el.currentTime = 0; music.el.play().catch(() => {}); }
     const t0 = performance.now();
     await new Promise((resolve) => {
       const step = () => {
         const t = (performance.now() - t0) / 1000;
-        renderAt(ctx, Math.min(t, total), cv.width, cv.height);
+        syncVideos(Math.min(t, total), t < total); renderAt(ctx, Math.min(t, total), cv.width, cv.height);
         $('exBar').style.width = Math.min(100, (t / total) * 100) + '%';
         $('exMsg').textContent = `Đang ghi… ${fmt(Math.min(t, total))} / ${fmt(total)}`;
         if (t >= total + 0.15 || exCancel) return resolve();
@@ -866,8 +971,8 @@ Quy tắc: chỉ dùng index ảnh có thật; một ảnh có thể dùng nhi�
       requestAnimationFrame(step);
     });
     rec.stop(); await done;
-    if (audioEl) audioEl.pause(); if (ac) ac.close();
-    stream.getTracks().forEach((t) => t.stop());
+    if (music) music.el.pause(); pauseVideos();
+    stream.getVideoTracks().forEach((t) => t.stop());
     recording = false;
     if (exCancel) { modal.hidden = true; applyAspect(); setStatus('Đã huỷ xuất video.'); return; }
     const type = (mime || 'video/webm').split(';')[0];
@@ -901,7 +1006,13 @@ Quy tắc: chỉ dùng index ảnh có thật; một ảnh có thể dùng nhi�
     } else {
       state.media = examples; state.scenes = exampleScenes();
     }
+    for (const m of state.media) {
+      if (m.kind !== 'video') continue;
+      try { const blob = await idb.get(m.id); if (blob) m.url = URL.createObjectURL(blob); } catch (e) { /* not stored */ }
+    }
+    state.media = state.media.filter((m) => m.kind !== 'video' || m.url);
     state.scenes = state.scenes.filter((s) => state.media.some((m) => m.id === s.mediaId));
+    state.scenes.forEach((s) => { if (s.trimStart == null) s.trimStart = 0; if (s.volume == null) s.volume = 1; });
     $('title').value = state.title;
     await Promise.all(state.media.map(loadImage));
     selectedId = state.scenes[0] ? state.scenes[0].id : null;
