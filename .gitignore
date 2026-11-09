@@ -21,3 +21,7 @@ public/screenshots/
 
 # Codex agents (duplicate of .claude/skills)
 .agents/
+
+# Flow Studio
+flow-data/
+web/dist/

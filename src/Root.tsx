@@ -40,6 +40,7 @@ import {
   RemotionBestPracticesScene,
   RemotionBestPracticesHero,
 } from "./scenes/demo/RemotionBestPracticesIntro";
+import { FlowCompositions } from "./flow/FlowCompositions";
 
 const FPS = 30;
 
@@ -322,6 +323,10 @@ export const RemotionRoot: React.FC = () => {
           width={1920}
           height={1080}
         />
+      </Folder>
+
+      <Folder name="FlowStudio">
+        <FlowCompositions />
       </Folder>
 
     </>

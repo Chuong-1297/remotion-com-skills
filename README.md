@@ -1,5 +1,7 @@
 # Remotion 科技视频组件库
 
+> **Flow Studio** — app tạo & dựng video AI từ prompt và hình ảnh (Google Veo + Remotion). Xem [FLOW_STUDIO.md](./FLOW_STUDIO.md).
+
 <p align="center">
   <img src="https://img.shields.io/badge/Remotion-4.0-007AFF?style=flat-square" alt="Remotion 4.0">
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square" alt="React 19">
