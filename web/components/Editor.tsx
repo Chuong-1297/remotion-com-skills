@@ -93,6 +93,7 @@ export const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ pr
     const timed = asset.kind !== 'image';
     const isFg = asset.kind === 'video' && asset.role === 'foreground';
     const base = isFg && asset.pairId ? project.assets.find((a) => a.pairId === asset.pairId && a.role === 'base') : undefined;
+    if (asset.kind === 'character') return;
     const clip: SceneClip = {
       id: newId(),
       assetId: asset.id,

@@ -39,6 +39,11 @@ export const Library: React.FC<Props> = (props) => {
     setUploading(true);
     try {
       for (const f of Array.from(files)) {
+        if (/\.glb$/i.test(f.name)) {
+          const up = await api.uploadRaw(f, 'model/gltf-binary');
+          await api.registerAsset(project.id, { kind: 'character', src: up.src, name: f.name.replace(/\.glb$/i, ''), mode: 'upload' });
+          continue;
+        }
         const dataUrl = await fileToDataUrl(f);
         const duration = f.type.startsWith('video/') ? await probeVideoDuration(URL.createObjectURL(f)) : 0;
         await api.upload(dataUrl, { projectId: project.id, name: f.name, duration });
@@ -51,7 +56,7 @@ export const Library: React.FC<Props> = (props) => {
     }
   };
 
-  const assets = project.assets.filter((a) => filter === 'all' || a.kind === filter);
+  const assets = project.assets.filter((a) => filter === 'all' || a.kind === filter || (filter === 'motion' && a.kind === 'character'));
 
   return (
     <div className="library">
@@ -73,7 +78,7 @@ export const Library: React.FC<Props> = (props) => {
         <button className="btn ghost" onClick={() => fileRef.current && fileRef.current.click()} disabled={uploading}>
           <IconUpload /> {uploading ? 'Đang tải lên…' : 'Tải tệp lên'}
         </button>
-        <input ref={fileRef} type="file" accept="image/*,video/mp4,video/webm" multiple hidden onChange={(e) => upload(e.target.files)} />
+        <input ref={fileRef} type="file" accept="image/*,video/mp4,video/webm,.glb,model/gltf-binary" multiple hidden onChange={(e) => upload(e.target.files)} />
       </div>
 
       {assets.length === 0 ? (
@@ -117,6 +122,11 @@ const AssetCard: React.FC<{ asset: Asset } & Props> = ({ asset, onAddToScene, on
             <IconAlert size={22} />
             <span>{asset.error}</span>
           </div>
+        ) : asset.kind === 'character' ? (
+          <div className="asset-pending">
+            <IconPerson size={36} />
+            <span>Nhân vật 3D (GLB) — chọn trong mục Nhân vật 3D của cảnh chuyển động</span>
+          </div>
         ) : asset.kind === 'motion' ? (
           <img src={asset.thumb || undefined} alt={asset.prompt} />
         ) : asset.kind === 'video' ? (
@@ -124,7 +134,7 @@ const AssetCard: React.FC<{ asset: Asset } & Props> = ({ asset, onAddToScene, on
         ) : (
           <img src={asset.src || undefined} alt={asset.prompt} />
         )}
-        {asset.status === 'done' ? (
+        {asset.status === 'done' && asset.kind !== 'character' ? (
           <div className="asset-overlay">
             <button className="chip-btn primary" onClick={() => onAddToScene(asset)} title="Thêm vào timeline dựng cảnh">
               <IconPlus size={14} /> Thêm vào cảnh
@@ -137,6 +147,7 @@ const AssetCard: React.FC<{ asset: Asset } & Props> = ({ asset, onAddToScene, on
           {asset.role === 'foreground' ? <span className="tag">Nền trong suốt</span> : null}
           {asset.role === 'base' ? <span className="tag">Lớp nền gốc</span> : null}
           {asset.kind === 'motion' ? <span className="tag">3D · {asset.durationSec.toFixed(1)}s</span> : null}
+          {asset.kind === 'character' ? <span className="tag">Nhân vật GLB</span> : null}
         </div>
       </div>
       <div className="asset-body">

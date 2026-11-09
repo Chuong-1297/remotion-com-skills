@@ -79,7 +79,7 @@ const mimeOf = (file: string) => {
   return 'application/octet-stream';
 };
 const extOf = (mime: string) =>
-  mime.indexOf('json') >= 0 ? '.json' : mime.indexOf('png') >= 0 ? '.png' : mime.indexOf('webp') >= 0 ? '.webp' : mime.indexOf('jpeg') >= 0 || mime.indexOf('jpg') >= 0 ? '.jpg' : mime.indexOf('mp4') >= 0 ? '.mp4' : mime.indexOf('webm') >= 0 ? '.webm' : '.bin';
+  mime.indexOf('gltf-binary') >= 0 ? '.glb' : mime.indexOf('json') >= 0 ? '.json' : mime.indexOf('png') >= 0 ? '.png' : mime.indexOf('webp') >= 0 ? '.webp' : mime.indexOf('jpeg') >= 0 || mime.indexOf('jpg') >= 0 ? '.jpg' : mime.indexOf('mp4') >= 0 ? '.mp4' : mime.indexOf('webm') >= 0 ? '.webm' : '.bin';
 const imageInput = (src: string) => {
   const full = mediaPath(src);
   return { imageBytes: fs.readFileSync(full).toString('base64'), mimeType: mimeOf(full) };
@@ -440,7 +440,7 @@ app.post(
   express.raw({ type: () => true, limit: '2gb' }),
   wrap((req, res) => {
     const mime = String(req.header('content-type') || 'application/octet-stream').split(';')[0];
-    if (!/^(image|video)\//.test(mime) && mime !== 'application/json') throw new Error('Định dạng tệp không được hỗ trợ');
+    if (!/^(image|video)\//.test(mime) && mime !== 'application/json' && mime !== 'model/gltf-binary') throw new Error('Định dạng tệp không được hỗ trợ');
     const body = req.body as Buffer;
     if (!body || !body.length) throw new Error('Tệp rỗng');
     const file = `${uid()}${extOf(mime)}`;
@@ -455,7 +455,7 @@ app.post(
   wrap((req, res) => {
     const p = getProject(req.params.id);
     const b = req.body || {};
-    const kind = b.kind === 'motion' ? 'motion' : b.kind === 'image' ? 'image' : 'video';
+    const kind = b.kind === 'motion' ? 'motion' : b.kind === 'character' ? 'character' : b.kind === 'image' ? 'image' : 'video';
     mediaPath(String(b.src || ''));
     const asset: StoredAsset = {
       id: uid(),
@@ -482,6 +482,12 @@ app.post(
     res.json(publicProject(p));
   }),
 );
+
+// Rigged characters made in Blender (blender/build_character.py).
+app.use('/characters', (_req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+}, express.static(path.join(ROOT, 'assets', 'characters')));
 
 // MediaPipe Pose runtime (wasm) and model, served locally so the browser never needs a CDN.
 app.use('/vendor/mediapipe', express.static(path.join(ROOT, 'node_modules/@mediapipe/tasks-vision/wasm')));

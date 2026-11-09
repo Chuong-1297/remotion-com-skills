@@ -10,7 +10,7 @@ export default defineConfig({
   server: {
     port: 5173,
     fs: { allow: [path.resolve(__dirname, '..')] },
-    proxy: { '/api': SERVER, '/media': SERVER, '/vendor': SERVER },
+    proxy: { '/api': SERVER, '/media': SERVER, '/vendor': SERVER, '/characters': SERVER },
   },
   build: { outDir: path.resolve(__dirname, 'dist'), emptyOutDir: true },
 });

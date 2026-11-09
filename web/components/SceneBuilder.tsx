@@ -54,6 +54,7 @@ const TEXT_POS: Array<[TextPosition, string]> = [
 ];
 
 const POSE_STYLES: Array<[PoseStyle, string]> = [
+  ['character', 'Nhân vật Blender'],
   ['mannequin', 'Ma-nơ-canh'],
   ['neon', 'Neon'],
   ['wire', 'Khung dây'],
@@ -293,10 +294,31 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
                     <IconPerson size={12} /> Nhân vật 3D
                   </h5>
                   <Select label="Kiểu" value={(selected.pose || defaultPose()).style} options={POSE_STYLES} onChange={(v) => updatePose(selected.id, { style: v })} />
-                  <div className="row between field-row">
-                    <span>Màu</span>
-                    <input type="color" value={(selected.pose || defaultPose()).color} onChange={(e) => updatePose(selected.id, { color: e.target.value })} />
-                  </div>
+                  {(selected.pose || defaultPose()).style === 'character' ? (
+                    <label className="row between field-row">
+                      <span>Nhân vật</span>
+                      <select
+                        className="select small"
+                        value={(selected.pose || defaultPose()).characterSrc || ''}
+                        onChange={(e) => updatePose(selected.id, { characterSrc: e.target.value || null })}
+                      >
+                        <option value="">Flow (dựng bằng Blender)</option>
+                        {project.assets
+                          .filter((a) => a.kind === 'character' && a.src)
+                          .map((a) => (
+                            <option key={a.id} value={a.src!}>
+                              {a.prompt.slice(0, 30)}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  {(selected.pose || defaultPose()).style !== 'character' ? (
+                    <div className="row between field-row">
+                      <span>Màu</span>
+                      <input type="color" value={(selected.pose || defaultPose()).color} onChange={(e) => updatePose(selected.id, { color: e.target.value })} />
+                    </div>
+                  ) : null}
                   <Range
                     label="Góc máy"
                     value={(selected.pose || defaultPose()).cameraAngle}

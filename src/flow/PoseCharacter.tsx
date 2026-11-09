@@ -3,7 +3,8 @@ import { AbsoluteFill, useCurrentFrame, useDelayRender, useVideoConfig } from 'r
 import { ThreeCanvas } from '@remotion/three';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { FPS, MotionData, PoseOptions } from './types';
+import { DEFAULT_CHARACTER, FPS, MotionData, PoseOptions } from './types';
+import { RiggedCharacter } from './RiggedCharacter';
 
 // MediaPipe Pose landmark indices used for the character.
 const L = { nose: 0, lEar: 7, rEar: 8, lSh: 11, rSh: 12, lEl: 13, rEl: 14, lWr: 15, rWr: 16, lIdx: 19, rIdx: 20, lHip: 23, rHip: 24, lKn: 25, rKn: 26, lAn: 27, rAn: 28, lHeel: 29, rHeel: 30, lToe: 31, rToe: 32 };
@@ -103,13 +104,16 @@ const Bone: React.FC<{ a: V3; b: V3; r: number; material: THREE.Material }> = ({
 const CameraRig: React.FC<{ angle: number; target: V3 }> = ({ angle, target }) => {
   const camera = useThree((s) => s.camera);
   const a = (angle * Math.PI) / 180;
-  camera.position.set(Math.sin(a) * 2.5 + target[0], 0.2 + target[1], Math.cos(a) * 2.5 + target[2]);
+  // Narrow lens so the character fills the frame (default three.js fov is a wide 75°).
+  const cam = camera as THREE.PerspectiveCamera;
+  if (cam.isPerspectiveCamera) cam.fov = 35;
+  camera.position.set(Math.sin(a) * 3.7 + target[0], 0.15 + target[1], Math.cos(a) * 3.7 + target[2]);
   camera.lookAt(target[0], target[1], target[2]);
   camera.updateProjectionMatrix();
   return null;
 };
 
-export const PoseCharacter: React.FC<{ src: string; trimBeforeFrames: number; options: PoseOptions }> = ({ src, trimBeforeFrames, options }) => {
+export const PoseCharacter: React.FC<{ src: string; trimBeforeFrames: number; options: PoseOptions; baseUrl: string }> = ({ src, trimBeforeFrames, options, baseUrl }) => {
   const data = useMotionData(src);
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
@@ -123,7 +127,9 @@ export const PoseCharacter: React.FC<{ src: string; trimBeforeFrames: number; op
     () => (options.style === 'mannequin' ? new THREE.MeshStandardMaterial({ color: '#2a2622', roughness: 0.6 }) : material),
     [options.style, material],
   );
-  const floor = useMemo(() => (data ? floorOf(data) : -1), [data]);
+  const isRig = options.style === 'character';
+  const charUrl = (() => { const c = options.characterSrc || DEFAULT_CHARACTER; return /^(https?:|data:|blob:)/.test(c) ? c : baseUrl + c; })();
+  const floor = useMemo(() => (isRig ? 0 : data ? floorOf(data) : -1), [data, isRig]);
 
   if (!data) return null;
   const t = (trimBeforeFrames + frame) / FPS;
@@ -131,7 +137,9 @@ export const PoseCharacter: React.FC<{ src: string; trimBeforeFrames: number; op
   const thick = options.style === 'wire' ? 0.012 : options.style === 'neon' ? 0.022 : 0.045;
 
   let content: React.ReactNode = null;
-  if (pose) {
+  if (isRig) {
+    content = <RiggedCharacter url={charUrl} pose={pose} />;
+  } else if (pose) {
     const mid = (i: number, j: number): V3 => [(pose[i][0] + pose[j][0]) / 2, (pose[i][1] + pose[j][1]) / 2, (pose[i][2] + pose[j][2]) / 2];
     const neck = mid(L.lSh, L.rSh);
     const pelvis = mid(L.lHip, L.rHip);
@@ -159,7 +167,7 @@ export const PoseCharacter: React.FC<{ src: string; trimBeforeFrames: number; op
   return (
     <AbsoluteFill>
       <ThreeCanvas width={width} height={height} gl={{ alpha: true, antialias: true, preserveDrawingBuffer: true }} style={{ background: 'transparent' }}>
-        <CameraRig angle={options.cameraAngle} target={[0, Math.min(0, floor + 0.9), 0]} />
+        <CameraRig angle={options.cameraAngle} target={isRig ? [0, 0.95, 0] : [0, Math.min(0, floor + 0.9), 0]} />
         <ambientLight intensity={0.55} />
         <directionalLight position={[2, 4, 3]} intensity={1.4} />
         <directionalLight position={[-3, 2, -2]} intensity={0.5} color="#8fb7ff" />

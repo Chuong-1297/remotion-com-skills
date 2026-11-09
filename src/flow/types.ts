@@ -28,13 +28,17 @@ export interface ClipBackground {
   mediaKind: 'image' | 'video' | null;
 }
 
-export type PoseStyle = 'mannequin' | 'neon' | 'wire';
+export type PoseStyle = 'character' | 'mannequin' | 'neon' | 'wire';
+
+/** Default rigged character, built in Blender by blender/build_character.py. */
+export const DEFAULT_CHARACTER = '/characters/flow-character.glb';
 
 export interface PoseOptions {
   style: PoseStyle;
   color: string;
   mirror: boolean;
   cameraAngle: number; // degrees around the character
+  characterSrc?: string | null; // rigged GLB for style 'character'
 }
 
 /** One frame of MediaPipe world landmarks: 33 joints, flattened [x,y,z,...] in meters (hip-centred). */
@@ -72,7 +76,7 @@ export type AssetRole = 'base' | 'foreground' | 'motion' | null;
 
 export interface Asset {
   id: string;
-  kind: 'video' | 'image' | 'motion';
+  kind: 'video' | 'image' | 'motion' | 'character';
   status: 'pending' | 'done' | 'error';
   src: string | null;
   prompt: string;
@@ -110,7 +114,7 @@ export const dimensionsFor = (aspect: AspectRatio, height = 720) => {
 };
 
 export const defaultBackground = (): ClipBackground => ({ type: 'color', color: '#101418', src: null, mediaKind: null });
-export const defaultPose = (): PoseOptions => ({ style: 'mannequin', color: '#f0a04b', mirror: false, cameraAngle: 0 });
+export const defaultPose = (): PoseOptions => ({ style: 'character', color: '#f0a04b', mirror: false, cameraAngle: 0, characterSrc: null });
 
 /** Length a clip occupies on the timeline, in seconds. */
 export const clipLength = (c: SceneClip) => {

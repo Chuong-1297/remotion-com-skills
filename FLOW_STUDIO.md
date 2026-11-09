@@ -32,6 +32,11 @@ Web app (giao diện tiếng Việt) theo quy trình kiểu "AI filmmaking": t�
 - Clip "Chuyển động" trên timeline điều khiển nhân vật 3D dựng bằng three.js + `@remotion/three`: kiểu ma-nơ-canh / neon / khung dây, màu, góc máy, lật gương, nền phía sau.
 - Video nên thấy rõ toàn thân một người. Nhân vật làm theo động tác cơ thể; ngón tay và biểu cảm khuôn mặt không được ghi lại.
 
+**Nhân vật 3D dựng bằng Blender**
+- Kiểu mặc định của clip chuyển động là **Nhân vật Blender**: nhân vật có tóc, mắt, áo hoodie, quần, giày, khung xương đầy đủ (`assets/characters/flow-character.glb`), dựng bằng script `blender/build_character.py`.
+- Chuyển động MediaPipe được gắn vào từng xương (hông, ngực, cổ, đầu, tay, chân), kể cả hạ người khi ngồi hoặc ngồi xổm.
+- Dùng nhân vật của riêng bạn: tải file `.glb` có khung xương lên Thư viện, rồi chọn trong mục **Nhân vật** của cảnh. Hỗ trợ tên xương của script này và của Mixamo (`mixamorig:Hips`, `LeftArm`, `LeftForeArm`…).
+
 **Chế độ Demo**: khi chưa có Gemini API key, app vẫn chạy đủ quy trình — clip được giả lập bằng Remotion (miễn phí), tiện để thử giao diện và tính năng dựng.
 
 ## Chạy
@@ -89,3 +94,16 @@ Composition `FlowTimeline` và `FlowMockClip` cũng xuất hiện trong Remotion
 ## Bản chạy trong Claude (Artifact)
 
 `artifact/flow-studio.html` là bản rút gọn chạy hoàn toàn trong trình duyệt: tải ảnh, nhờ Claude lên kịch bản bằng prompt, chỉnh cảnh / chữ / chuyển cảnh và xuất MP4/WebM. Đã đăng tại https://claude.ai/artifact/N1np64qtRcVLNUt4tJ3TQy (riêng tư, chia sẻ qua menu Share).
+
+## Dựng nhân vật với Blender và mcp-for-blender
+
+Script `blender/build_character.py` dựng một nhân vật hoàn chỉnh (thân, đầu, quần áo, khung xương, gán trọng lượng da) rồi xuất GLB. Màu sắc chỉnh trong `CONFIG` ở đầu file.
+
+- **Qua mcp-for-blender** (Claude điều khiển Blender trên máy bạn): cài theo hướng dẫn của repo mcp-for-blender, mở Blender, rồi nhờ Claude: *"Chạy script blender/build_character.py bằng execute_blender_code, đổi áo thành màu xanh lá, xuất ra assets/characters/flow-character.glb"*. Claude cũng có thể sửa hình dáng, thêm phụ kiện, hoặc dùng các công cụ tạo/tìm mô hình 3D của mcp-for-blender rồi gắn khung xương và xuất GLB.
+- **Dòng lệnh:**
+
+```bash
+blender --background --python blender/build_character.py -- assets/characters/flow-character.glb
+```
+
+- **Nhân vật có sẵn từ nơi khác:** gắn khung xương (ví dụ bằng Mixamo), xuất GLB, rồi tải lên Thư viện của Flow Studio.

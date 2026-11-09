@@ -113,7 +113,7 @@ const ClipView: React.FC<{ clip: SceneClip; trimBefore: number; baseUrl: string 
     return (
       <AbsoluteFill style={{ backgroundColor: '#000' }}>
         <BackgroundLayer bg={clip.bg} baseUrl={baseUrl} />
-        <PoseCharacter src={src} trimBeforeFrames={trimBefore} options={clip.pose || defaultPose()} />
+        <PoseCharacter src={src} trimBeforeFrames={trimBefore} options={clip.pose || defaultPose()} baseUrl={baseUrl} />
         {caption}
       </AbsoluteFill>
     );

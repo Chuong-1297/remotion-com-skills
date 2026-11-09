@@ -61,7 +61,8 @@
     "flow:server": "tsx watch server/index.ts",
     "flow:web": "vite --config web/vite.config.ts",
     "flow:build": "vite build --config web/vite.config.ts",
-    "lint:flow": "tsc -p tsconfig.flow.json"
+    "lint:flow": "tsc -p tsconfig.flow.json",
+    "character:build": "blender --background --python blender/build_character.py -- assets/characters/flow-character.glb"
   },
   "sideEffects": [
     "*.css"

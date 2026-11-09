@@ -78,7 +78,7 @@ export const api = {
   },
   registerAsset: (
     id: string,
-    body: { kind: 'video' | 'image' | 'motion'; src: string; name: string; mode: 'matte' | 'motion' | 'upload'; duration?: number; thumb?: string | null; role?: 'base' | 'foreground' | 'motion'; pairId?: string; sourceAssetId?: string; model?: string },
+    body: { kind: 'video' | 'image' | 'motion' | 'character'; src: string; name: string; mode: 'matte' | 'motion' | 'upload'; duration?: number; thumb?: string | null; role?: 'base' | 'foreground' | 'motion'; pairId?: string; sourceAssetId?: string; model?: string },
   ) => call<Project>('POST', `/api/projects/${id}/assets`, body),
   generate: (id: string, body: GenerateBody) => call<Project>('POST', `/api/projects/${id}/generate`, body),
   render: (id: string, height: number) => call<RenderJob>('POST', `/api/projects/${id}/render`, { height }),
