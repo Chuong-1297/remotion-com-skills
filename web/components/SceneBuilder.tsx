@@ -25,6 +25,7 @@ import {
   timelineDuration,
 } from '../../src/flow/types';
 import { fmtTime } from '../api';
+import { detectRig } from '../poseDetect';
 import { IconCopy, IconFilm, IconImage, IconPerson, IconScissors, IconTrash, IconType } from '../icons';
 
 const PX_PER_SEC = 46;
@@ -157,6 +158,22 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
     return a ? a.id : 'color';
   };
   const [overlayId, setOverlayId] = useState<string | null>(null);
+  const [rigStatus, setRigStatus] = useState<Record<string, string>>({});
+  const motionAssets = project.assets.filter((a) => a.kind === 'motion' && a.status === 'done' && a.src);
+  const setOverlayMotion = async (clipId: string, o: Overlay, motionSrc: string) => {
+    if (!motionSrc) {
+      updateOverlay(clipId, o.id, { motion: null });
+      return;
+    }
+    setRigStatus((s) => ({ ...s, [o.id]: 'Đang nhận dạng dáng nhân vật trong ảnh…' }));
+    try {
+      const rig = o.motion && o.motion.rig ? o.motion.rig : await detectRig(o.src);
+      updateOverlay(clipId, o.id, { motion: { src: motionSrc, rig, offset: o.motion ? o.motion.offset : 0, mirror: o.motion ? o.motion.mirror : false } });
+      setRigStatus((s) => ({ ...s, [o.id]: '' }));
+    } catch (e) {
+      setRigStatus((s) => ({ ...s, [o.id]: `Không nhận dạng được: ${(e as Error).message}` }));
+    }
+  };
   const overlayAssets = project.assets
     .filter((a) => a.kind === 'image' && a.status === 'done' && a.src)
     .sort((a, b) => (a.role === 'foreground' ? 0 : 1) - (b.role === 'foreground' ? 0 : 1));
@@ -459,6 +476,41 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
                           <Range label="Cao" value={o.height} min={0.1} max={1.5} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => updateOverlay(selected.id, o.id, { height: v })} />
                           <Range label="Xoay" value={o.rotation} min={-45} max={45} step={1} fmt={(v) => `${v}°`} onChange={(v) => updateOverlay(selected.id, o.id, { rotation: v })} />
                           <Range label="Độ sáng" value={o.brightness} min={0.5} max={1.5} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => updateOverlay(selected.id, o.id, { brightness: v })} />
+                          <label className="row between field-row">
+                            <span>Làm theo chuyển động</span>
+                            <select className="select small" value={o.motion ? o.motion.src : ''} onChange={(e) => setOverlayMotion(selected.id, o, e.target.value)}>
+                              <option value="">{motionAssets.length ? 'Không (ảnh tĩnh)' : 'Chưa có chuyển động'}</option>
+                              {motionAssets.map((a) => (
+                                <option key={a.id} value={a.src!}>
+                                  {a.prompt.replace('Chuyển động: ', '').slice(0, 26)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {rigStatus[o.id] ? <div className="muted small">{rigStatus[o.id]}</div> : null}
+                          {!motionAssets.length ? <div className="muted small">Học chuyển động từ một video trong Thư viện (nút hình người) trước.</div> : null}
+                          {o.motion ? (
+                            <>
+                              {o.motion.rig.estimated ? (
+                                <div className="muted small">Không nhận ra dáng người trong ảnh, đang dùng khung xương ước lượng (đứng thẳng, tay buông). Ảnh nhân vật đứng thẳng, thấy rõ tay chân cho kết quả tốt nhất.</div>
+                              ) : (
+                                <div className="muted small">Đã nhận ra dáng nhân vật trong ảnh.</div>
+                              )}
+                              <Range
+                                label="Bắt đầu từ giây"
+                                value={o.motion.offset}
+                                min={0}
+                                max={Math.max(0.1, (motionAssets.find((a) => a.src === o.motion!.src)?.durationSec || 1) - 0.1)}
+                                step={0.1}
+                                fmt={(v) => `${v.toFixed(1)}s`}
+                                onChange={(v) => updateOverlay(selected.id, o.id, { motion: { ...o.motion!, offset: v } })}
+                              />
+                              <label className="row between field-row">
+                                <span>Đảo trái phải động tác</span>
+                                <input type="checkbox" checked={o.motion.mirror} onChange={(e) => updateOverlay(selected.id, o.id, { motion: { ...o.motion!, mirror: e.target.checked } })} />
+                              </label>
+                            </>
+                          ) : null}
                           <Select label="Xuất hiện" value={o.enter} options={ENTERS} onChange={(v) => updateOverlay(selected.id, o.id, { enter: v })} />
                           <Select label="Chuyển động" value={o.idle} options={IDLES} onChange={(v) => updateOverlay(selected.id, o.id, { idle: v })} />
                           <label className="row between field-row">

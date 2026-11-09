@@ -18,6 +18,7 @@ import { clockWipe } from '@remotion/transitions/clock-wipe';
 import { iris } from '@remotion/transitions/iris';
 import { ClipBackground, FlowTimelineProps, Overlay, KenBurns, SceneClip, TextOverlay, TransitionType, buildTimeline, defaultPose } from './types';
 import { PoseCharacter } from './PoseCharacter';
+import { PuppetOverlay } from './PuppetOverlay';
 
 const resolveSrc = (src: string, baseUrl: string) => (/^(https?:|data:|blob:)/.test(src) ? src : baseUrl + src);
 
@@ -134,12 +135,16 @@ const OverlayItem: React.FC<{ o: Overlay; baseUrl: string }> = ({ o, baseUrl }) 
   );
 };
 
-const OverlayLayer: React.FC<{ overlays: Overlay[] | undefined; baseUrl: string }> = ({ overlays, baseUrl }) =>
+const OverlayLayer: React.FC<{ overlays: Overlay[] | undefined; baseUrl: string; trimBefore?: number }> = ({ overlays, baseUrl, trimBefore }) =>
   overlays && overlays.length ? (
     <AbsoluteFill>
-      {overlays.map((o) => (
-        <OverlayItem key={o.id} o={o} baseUrl={baseUrl} />
-      ))}
+      {overlays.map((o) =>
+        o.motion && o.motion.rig ? (
+          <PuppetOverlay key={o.id} o={o} baseUrl={baseUrl} trimBeforeFrames={trimBefore || 0} />
+        ) : (
+          <OverlayItem key={o.id} o={o} baseUrl={baseUrl} />
+        ),
+      )}
     </AbsoluteFill>
   ) : null;
 
@@ -166,7 +171,7 @@ const ClipView: React.FC<{ clip: SceneClip; trimBefore: number; baseUrl: string 
       <AbsoluteFill style={{ backgroundColor: '#000' }}>
         <BackgroundLayer bg={clip.bg} baseUrl={baseUrl} />
         <PoseCharacter src={src} trimBeforeFrames={trimBefore} options={clip.pose || defaultPose()} baseUrl={baseUrl} />
-        <OverlayLayer overlays={clip.overlays} baseUrl={baseUrl} />
+        <OverlayLayer overlays={clip.overlays} baseUrl={baseUrl} trimBefore={trimBefore} />
         {caption}
       </AbsoluteFill>
     );
@@ -195,7 +200,7 @@ const ClipView: React.FC<{ clip: SceneClip; trimBefore: number; baseUrl: string 
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         </AbsoluteFill>
-        <OverlayLayer overlays={clip.overlays} baseUrl={baseUrl} />
+        <OverlayLayer overlays={clip.overlays} baseUrl={baseUrl} trimBefore={trimBefore} />
         {useBase ? null : caption}
       </AbsoluteFill>
     );
@@ -209,7 +214,7 @@ const ClipView: React.FC<{ clip: SceneClip; trimBefore: number; baseUrl: string 
       ) : (
         <KenBurnsImage src={src} mode={clip.kenBurns} transparent={clip.alpha} fit={clip.alpha ? 'contain' : 'cover'} />
       )}
-      <OverlayLayer overlays={clip.overlays} baseUrl={baseUrl} />
+      <OverlayLayer overlays={clip.overlays} baseUrl={baseUrl} trimBefore={trimBefore} />
       {caption}
     </AbsoluteFill>
   );

@@ -64,6 +64,15 @@ export interface Overlay {
   brightness: number; // 0.5..1.5, to match the scene lighting
   enter: OverlayEnter;
   idle: OverlayIdle;
+  /** Makes the cut-out follow a learned motion (2D puppet). */
+  motion?: OverlayMotion | null;
+}
+
+export interface OverlayMotion {
+  src: string; // motion JSON
+  rig: { w: number; h: number; pts: number[]; estimated: boolean }; // rest pose: 33 landmarks in image pixels
+  offset: number; // seconds into the motion
+  mirror: boolean;
 }
 
 /** A clip on the scene-builder timeline. Times are in seconds. */

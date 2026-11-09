@@ -33,6 +33,12 @@ Web app (giao diện tiếng Việt) theo quy trình kiểu "AI filmmaking": t�
 - Trong Dựng cảnh, chọn một cảnh bất kỳ (video, ảnh, nhân vật 3D) → **Nhân vật đặt vào cảnh** → chọn ảnh đã tách nền. Chỉnh vị trí, chiều cao, xoay, độ sáng (cho hợp ánh sáng của cảnh), bóng đổ, lật ngang, hiệu ứng xuất hiện (bật ra, hiện dần, trượt vào, trồi lên) và chuyển động nhẹ (nhún, thở, lắc lư). Một cảnh đặt được nhiều nhân vật.
 - Ảnh đã tách nền cũng có thể làm cảnh chính, với nền thay thế (màu, ảnh hoặc video).
 
+**Cho nhân vật trong ảnh làm theo video (ảnh động kiểu rối 2D)**
+- Học chuyển động từ một video (nút hình người), rồi trong **Nhân vật đặt vào cảnh** chọn **Làm theo chuyển động**.
+- MediaPipe nhận dạng dáng nhân vật trong ảnh; nếu không nhận ra (ví dụ nhân vật hoạt hình lạ) thì dùng khung xương ước lượng theo tỉ lệ cơ thể.
+- Ảnh được phủ lưới tam giác gắn vào xương; mỗi khung hình thân, đầu, tay, chân xoay theo chuyển động, chân giữ trên mặt đất. Chỉnh được giây bắt đầu và đảo trái phải; chuyển động tự lặp nếu cảnh dài hơn.
+- Ảnh nhân vật đứng thẳng, thấy rõ tay chân (tốt nhất là dang tay) cho kết quả đẹp nhất. Phần bị che trong ảnh gốc (ví dụ phía sau tay) không tự vẽ thêm được.
+
 **Học chuyển động → nhân vật 3D** (nút hình người trên thẻ video)
 - MediaPipe Pose đọc từng khung hình, ghi lại 33 khớp cơ thể của một người (chạy trong trình duyệt, miễn phí).
 - Clip "Chuyển động" trên timeline điều khiển nhân vật 3D dựng bằng three.js + `@remotion/three`: kiểu ma-nơ-canh / neon / khung dây, màu, góc máy, lật gương, nền phía sau.
