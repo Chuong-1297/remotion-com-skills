@@ -70,6 +70,16 @@ export const api = {
   deleteAsset: (id: string, assetId: string) => call<Project>('DELETE', `/api/projects/${id}/assets/${assetId}`),
   upload: (dataUrl: string, opts: { projectId?: string; name?: string; duration?: number } = {}) =>
     call<{ src: string; kind: 'image' | 'video' }>('POST', '/api/upload', { dataUrl, ...opts }),
+  uploadRaw: async (data: Blob, type?: string): Promise<{ src: string }> => {
+    const res = await fetch('/api/upload-raw', { method: 'POST', headers: { 'Content-Type': type || data.type || 'application/octet-stream' }, body: data });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((d && d.error) || `Tải lên thất bại (${res.status})`);
+    return d as { src: string };
+  },
+  registerAsset: (
+    id: string,
+    body: { kind: 'video' | 'image' | 'motion'; src: string; name: string; mode: 'matte' | 'motion' | 'upload'; duration?: number; thumb?: string | null; role?: 'base' | 'foreground' | 'motion'; pairId?: string; sourceAssetId?: string; model?: string },
+  ) => call<Project>('POST', `/api/projects/${id}/assets`, body),
   generate: (id: string, body: GenerateBody) => call<Project>('POST', `/api/projects/${id}/generate`, body),
   render: (id: string, height: number) => call<RenderJob>('POST', `/api/projects/${id}/render`, { height }),
   renderStatus: (jobId: string) => call<RenderJob>('GET', `/api/render/${jobId}`),
@@ -114,6 +124,8 @@ export const grabVideoFrame = (src: string, at: number | 'end') =>
     v.onerror = () => reject(new Error('Không đọc được video'));
     v.src = src;
   });
+
+export const dataUrlToBlob = async (dataUrl: string) => (await fetch(dataUrl)).blob();
 
 export const fmtTime = (sec: number) => {
   const s = Math.max(0, sec);

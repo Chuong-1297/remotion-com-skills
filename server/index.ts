@@ -19,7 +19,10 @@ const ORIGIN = `http://localhost:${PORT}`;
 
 // Optional: use an existing Chrome/Chromium instead of letting Remotion download one.
 const BROWSER = process.env.REMOTION_BROWSER_EXECUTABLE || null;
-const browserOpts = { browserExecutable: BROWSER };
+// WebGL backend for the 3D motion clips. 'angle' uses the GPU; 'swangle' renders in software (servers without a GPU).
+const GL = (process.env.REMOTION_GL || 'angle') as 'angle' | 'swangle' | 'egl' | 'swiftshader' | 'vulkan' | 'angle-egl';
+const browserOpts = { browserExecutable: BROWSER, chromiumOptions: { gl: GL } };
+const MODELS_DIR = path.join(DATA_DIR, 'models');
 
 fs.mkdirSync(MEDIA_DIR, { recursive: true });
 
@@ -76,7 +79,7 @@ const mimeOf = (file: string) => {
   return 'application/octet-stream';
 };
 const extOf = (mime: string) =>
-  mime.indexOf('png') >= 0 ? '.png' : mime.indexOf('webp') >= 0 ? '.webp' : mime.indexOf('jpeg') >= 0 || mime.indexOf('jpg') >= 0 ? '.jpg' : mime.indexOf('mp4') >= 0 ? '.mp4' : mime.indexOf('webm') >= 0 ? '.webm' : '.bin';
+  mime.indexOf('json') >= 0 ? '.json' : mime.indexOf('png') >= 0 ? '.png' : mime.indexOf('webp') >= 0 ? '.webp' : mime.indexOf('jpeg') >= 0 || mime.indexOf('jpg') >= 0 ? '.jpg' : mime.indexOf('mp4') >= 0 ? '.mp4' : mime.indexOf('webm') >= 0 ? '.webm' : '.bin';
 const imageInput = (src: string) => {
   const full = mediaPath(src);
   return { imageBytes: fs.readFileSync(full).toString('base64'), mimeType: mimeOf(full) };
@@ -295,8 +298,13 @@ async function runRender(job: RenderJob, project: StoredProject, height: number)
 
 // ---------- HTTP ----------
 const app = express();
-app.use(express.json({ limit: '60mb' }));
-app.use('/media', express.static(MEDIA_DIR));
+const jsonParser = express.json({ limit: '60mb' });
+app.use((req, res, next) => (req.path === '/api/upload-raw' ? next() : jsonParser(req, res, next)));
+// CORS so the Remotion renderer (served from its own port) can fetch motion data and media.
+app.use('/media', (_req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+}, express.static(MEDIA_DIR));
 
 const apiKeyOf = (req: express.Request) => {
   const h = req.header('x-gemini-key');
@@ -423,6 +431,79 @@ app.post(
       return res.json({ src, kind, asset: publicAsset(asset) });
     }
     res.json({ src, kind });
+  }),
+);
+
+// Binary upload (large videos, matted layers, motion JSON). Body = raw bytes, type from Content-Type.
+app.post(
+  '/api/upload-raw',
+  express.raw({ type: () => true, limit: '2gb' }),
+  wrap((req, res) => {
+    const mime = String(req.header('content-type') || 'application/octet-stream').split(';')[0];
+    if (!/^(image|video)\//.test(mime) && mime !== 'application/json') throw new Error('Định dạng tệp không được hỗ trợ');
+    const body = req.body as Buffer;
+    if (!body || !body.length) throw new Error('Tệp rỗng');
+    const file = `${uid()}${extOf(mime)}`;
+    fs.writeFileSync(path.join(MEDIA_DIR, file), body);
+    res.json({ src: `/media/${file}` });
+  }),
+);
+
+// Register an already-uploaded file as a project asset (matting results, motion data).
+app.post(
+  '/api/projects/:id/assets',
+  wrap((req, res) => {
+    const p = getProject(req.params.id);
+    const b = req.body || {};
+    const kind = b.kind === 'motion' ? 'motion' : b.kind === 'image' ? 'image' : 'video';
+    mediaPath(String(b.src || ''));
+    const asset: StoredAsset = {
+      id: uid(),
+      kind,
+      status: 'done',
+      src: String(b.src),
+      prompt: String(b.name || '').slice(0, 300),
+      mode: b.mode === 'matte' || b.mode === 'motion' ? b.mode : 'upload',
+      model: String(b.model || ''),
+      aspect: p.aspect,
+      durationSec: Number(b.duration) || 0,
+      error: null,
+      createdAt: Date.now(),
+      mock: false,
+      canExtend: false,
+      thumb: typeof b.thumb === 'string' ? b.thumb : null,
+      role: b.role === 'base' || b.role === 'foreground' || b.role === 'motion' ? b.role : null,
+      pairId: typeof b.pairId === 'string' ? b.pairId : null,
+      sourceAssetId: typeof b.sourceAssetId === 'string' ? b.sourceAssetId : null,
+    };
+    p.assets.unshift(asset);
+    p.updatedAt = Date.now();
+    save();
+    res.json(publicProject(p));
+  }),
+);
+
+// MediaPipe Pose runtime (wasm) and model, served locally so the browser never needs a CDN.
+app.use('/vendor/mediapipe', express.static(path.join(ROOT, 'node_modules/@mediapipe/tasks-vision/wasm')));
+const POSE_MODELS: Record<string, string> = {
+  lite: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task',
+  full: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task',
+  heavy: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/latest/pose_landmarker_heavy.task',
+};
+app.get(
+  '/api/models/pose/:variant',
+  wrap(async (req, res) => {
+    const variant = POSE_MODELS[req.params.variant] ? req.params.variant : 'full';
+    fs.mkdirSync(MODELS_DIR, { recursive: true });
+    const file = path.join(MODELS_DIR, `pose_landmarker_${variant}.task`);
+    if (!fs.existsSync(file)) {
+      console.log(`[pose] downloading ${variant} model ...`);
+      const r = await fetch(POSE_MODELS[variant]);
+      if (!r.ok) throw new Error(`Không tải được model MediaPipe Pose (${r.status}). Tải thủ công rồi đặt vào ${file}`);
+      fs.writeFileSync(file + '.tmp', Buffer.from(await r.arrayBuffer()));
+      fs.renameSync(file + '.tmp', file);
+    }
+    res.sendFile(file);
   }),
 );
 

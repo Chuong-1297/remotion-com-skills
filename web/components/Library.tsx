@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import type { Asset, Project } from '../../src/flow/types';
 import { api, fileToDataUrl, probeVideoDuration } from '../api';
-import { IconAlert, IconCopy, IconDownload, IconExpand, IconFrame, IconLayers, IconPlus, IconTrash, IconUpload, IconWand } from '../icons';
+import { IconAlert, IconCopy, IconDownload, IconExpand, IconFrame, IconLayers, IconPerson, IconPlus, IconScissors, IconTrash, IconUpload, IconWand } from '../icons';
 
 const modeLabel: Record<string, string> = {
   text: 'Văn bản → Video',
@@ -10,6 +10,8 @@ const modeLabel: Record<string, string> = {
   extend: 'Kéo dài',
   image: 'Tạo ảnh',
   upload: 'Tải lên',
+  matte: 'Tách nền',
+  motion: 'Chuyển động',
 };
 
 interface Props {
@@ -20,6 +22,8 @@ interface Props {
   onExtend: (a: Asset) => void;
   onReuse: (a: Asset) => void;
   onDelete: (a: Asset) => void;
+  onMatte: (a: Asset) => void;
+  onLearnMotion: (a: Asset) => void;
   onUploaded: (p: Project) => void;
   onError: (msg: string) => void;
 }
@@ -27,7 +31,7 @@ interface Props {
 export const Library: React.FC<Props> = (props) => {
   const { project } = props;
   const fileRef = useRef<HTMLInputElement>(null);
-  const [filter, setFilter] = useState<'all' | 'video' | 'image'>('all');
+  const [filter, setFilter] = useState<'all' | 'video' | 'image' | 'motion'>('all');
   const [uploading, setUploading] = useState(false);
 
   const upload = async (files: FileList | null) => {
@@ -58,6 +62,7 @@ export const Library: React.FC<Props> = (props) => {
               ['all', 'Tất cả'],
               ['video', 'Video'],
               ['image', 'Ảnh'],
+              ['motion', 'Chuyển động'],
             ] as const
           ).map(([k, label]) => (
             <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>
@@ -88,12 +93,12 @@ export const Library: React.FC<Props> = (props) => {
   );
 };
 
-const AssetCard: React.FC<{ asset: Asset } & Props> = ({ asset, onAddToScene, onUseAsFrame, onUseAsIngredient, onExtend, onReuse, onDelete }) => {
+const AssetCard: React.FC<{ asset: Asset } & Props> = ({ asset, onAddToScene, onUseAsFrame, onUseAsIngredient, onExtend, onReuse, onDelete, onMatte, onLearnMotion }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   return (
     <div className={`asset-card ${asset.status}`}>
       <div
-        className={`asset-media ${asset.aspect === '9:16' ? 'portrait' : ''}`}
+        className={`asset-media ${asset.aspect === '9:16' ? 'portrait' : ''} ${asset.role === 'foreground' ? 'checker' : ''}`}
         onMouseEnter={() => videoRef.current && videoRef.current.play().catch(() => undefined)}
         onMouseLeave={() => {
           if (videoRef.current) {
@@ -112,6 +117,8 @@ const AssetCard: React.FC<{ asset: Asset } & Props> = ({ asset, onAddToScene, on
             <IconAlert size={22} />
             <span>{asset.error}</span>
           </div>
+        ) : asset.kind === 'motion' ? (
+          <img src={asset.thumb || undefined} alt={asset.prompt} />
         ) : asset.kind === 'video' ? (
           <video ref={videoRef} src={asset.src || undefined} muted loop playsInline preload="metadata" controls={false} />
         ) : (
@@ -127,6 +134,9 @@ const AssetCard: React.FC<{ asset: Asset } & Props> = ({ asset, onAddToScene, on
         <div className="asset-tags">
           <span className="tag">{modeLabel[asset.mode] || asset.mode}</span>
           {asset.mock ? <span className="tag warn">Demo</span> : null}
+          {asset.role === 'foreground' ? <span className="tag">Nền trong suốt</span> : null}
+          {asset.role === 'base' ? <span className="tag">Lớp nền gốc</span> : null}
+          {asset.kind === 'motion' ? <span className="tag">3D · {asset.durationSec.toFixed(1)}s</span> : null}
         </div>
       </div>
       <div className="asset-body">
@@ -149,6 +159,16 @@ const AssetCard: React.FC<{ asset: Asset } & Props> = ({ asset, onAddToScene, on
               <button className="icon-btn" title="Lấy khung cuối làm khung đầu cảnh tiếp theo" onClick={() => onUseAsFrame(asset, 'start')}>
                 <IconFrame size={16} />
               </button>
+              {asset.role !== 'foreground' ? (
+                <button className="icon-btn" title="Tách nền (người / vật thể)" onClick={() => onMatte(asset)}>
+                  <IconScissors size={16} />
+                </button>
+              ) : null}
+              {asset.role !== 'foreground' ? (
+                <button className="icon-btn" title="Học chuyển động cho nhân vật 3D" onClick={() => onLearnMotion(asset)}>
+                  <IconPerson size={16} />
+                </button>
+              ) : null}
               {asset.canExtend || asset.mock ? (
                 <button className="icon-btn" title="Kéo dài clip (Veo)" onClick={() => onExtend(asset)}>
                   <IconExpand size={16} />
@@ -156,7 +176,7 @@ const AssetCard: React.FC<{ asset: Asset } & Props> = ({ asset, onAddToScene, on
               ) : null}
             </>
           ) : null}
-          {asset.mode !== 'upload' ? (
+          {asset.mode !== 'upload' && asset.mode !== 'matte' && asset.mode !== 'motion' ? (
             <button className="icon-btn" title="Dùng lại prompt" onClick={() => onReuse(asset)}>
               <IconCopy size={16} />
             </button>

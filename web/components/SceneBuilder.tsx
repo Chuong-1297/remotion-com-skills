@@ -2,8 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Player, PlayerRef } from '@remotion/player';
 import { FlowTimeline } from '../../src/flow/FlowTimeline';
 import {
+  ClipBackground,
   FPS,
   KenBurns,
+  PoseOptions,
+  PoseStyle,
+  defaultBackground,
+  defaultPose,
   Project,
   SceneClip,
   TextAnimation,
@@ -16,7 +21,7 @@ import {
   timelineDuration,
 } from '../../src/flow/types';
 import { fmtTime } from '../api';
-import { IconCopy, IconFilm, IconImage, IconScissors, IconTrash, IconType } from '../icons';
+import { IconCopy, IconFilm, IconImage, IconPerson, IconScissors, IconTrash, IconType } from '../icons';
 
 const PX_PER_SEC = 46;
 
@@ -46,6 +51,12 @@ const TEXT_POS: Array<[TextPosition, string]> = [
   ['top', 'Trên'],
   ['center', 'Giữa'],
   ['bottom', 'Dưới'],
+];
+
+const POSE_STYLES: Array<[PoseStyle, string]> = [
+  ['mannequin', 'Ma-nơ-canh'],
+  ['neon', 'Neon'],
+  ['wire', 'Khung dây'],
 ];
 
 const defaultText = (): TextOverlay => ({ content: 'Tiêu đề của bạn', position: 'bottom', animation: 'slideUp', color: '#ffffff', size: 64, background: false });
@@ -115,6 +126,21 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
   const updateText = (id: string, patch: Partial<TextOverlay>) =>
     setClips((cs) => cs.map((c) => (c.id === id ? { ...c, text: { ...(c.text || defaultText()), ...patch } } : c)));
 
+  const updatePose = (id: string, patch: Partial<PoseOptions>) =>
+    setClips((cs) => cs.map((c) => (c.id === id ? { ...c, pose: { ...(c.pose || defaultPose()), ...patch } } : c)));
+  const updateBg = (id: string, patch: Partial<ClipBackground>) =>
+    setClips((cs) => cs.map((c) => (c.id === id ? { ...c, bg: { ...(c.bg || defaultBackground()), ...patch } } : c)));
+  const bgAssets = project.assets.filter((a) => a.status === 'done' && a.src && (a.kind === 'image' || (a.kind === 'video' && a.role !== 'foreground')));
+  const bgValue = (bg: ClipBackground | null | undefined) => {
+    if (!bg || bg.type !== 'media') return 'color';
+    const a = bgAssets.find((x) => x.src === bg.src);
+    return a ? a.id : 'color';
+  };
+  const thumbOf = (c: SceneClip) => {
+    const a = c.assetId ? project.assets.find((x) => x.id === c.assetId) : undefined;
+    return a && a.thumb ? a.thumb : null;
+  };
+
   const seekToClip = (i: number) => {
     setSelectedId(clips[i].id);
     if (playerRef.current) playerRef.current.seekTo(starts[i] + (items[i] ? items[i].transitionFrames : 0));
@@ -145,7 +171,7 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
     if (local <= 0.3 || local >= len - 0.3) return;
     const a: SceneClip = { ...selected };
     const b: SceneClip = { ...selected, id: newId(), transition: 'none', text: null };
-    if (selected.kind === 'video') {
+    if (selected.kind !== 'image') {
       a.trimEnd = selected.trimStart + local;
       b.trimStart = selected.trimStart + local;
     } else {
@@ -214,7 +240,7 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
             <>
               <div className="inspector-head">
                 <h4>
-                  Cảnh {selectedIndex + 1} · {selected.kind === 'video' ? 'Video' : 'Ảnh'}
+                  Cảnh {selectedIndex + 1} · {selected.kind === 'motion' ? 'Nhân vật 3D' : selected.kind === 'video' ? (selected.alpha ? 'Video tách nền' : 'Video') : 'Ảnh'}
                 </h4>
                 <div className="row gap-s">
                   <button className="icon-btn" title="Tách tại vị trí phát" onClick={split} disabled={!canSplit}>
@@ -231,7 +257,7 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
 
               <section>
                 <h5>Thời lượng</h5>
-                {selected.kind === 'video' ? (
+                {selected.kind !== 'image' ? (
                   <>
                     <Range
                       label="Cắt đầu"
@@ -251,7 +277,7 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
                       fmt={(v) => `${v.toFixed(1)}s`}
                       onChange={(v) => update(selected.id, { trimEnd: v })}
                     />
-                    <Range label="Âm lượng" value={selected.volume} min={0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => update(selected.id, { volume: v })} />
+                    {selected.kind === 'video' ? <Range label="Âm lượng" value={selected.volume} min={0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => update(selected.id, { volume: v })} /> : null}
                   </>
                 ) : (
                   <>
@@ -260,6 +286,79 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
                   </>
                 )}
               </section>
+
+              {selected.kind === 'motion' ? (
+                <section>
+                  <h5>
+                    <IconPerson size={12} /> Nhân vật 3D
+                  </h5>
+                  <Select label="Kiểu" value={(selected.pose || defaultPose()).style} options={POSE_STYLES} onChange={(v) => updatePose(selected.id, { style: v })} />
+                  <div className="row between field-row">
+                    <span>Màu</span>
+                    <input type="color" value={(selected.pose || defaultPose()).color} onChange={(e) => updatePose(selected.id, { color: e.target.value })} />
+                  </div>
+                  <Range
+                    label="Góc máy"
+                    value={(selected.pose || defaultPose()).cameraAngle}
+                    min={-180}
+                    max={180}
+                    step={5}
+                    fmt={(v) => `${v}°`}
+                    onChange={(v) => updatePose(selected.id, { cameraAngle: v })}
+                  />
+                  <label className="row between field-row">
+                    <span>Lật gương</span>
+                    <input type="checkbox" checked={(selected.pose || defaultPose()).mirror} onChange={(e) => updatePose(selected.id, { mirror: e.target.checked })} />
+                  </label>
+                </section>
+              ) : null}
+
+              {selected.kind === 'motion' || selected.alpha ? (
+                <section>
+                  <h5>Nền phía sau</h5>
+                  {selected.alpha && selected.baseSrc ? (
+                    <label className="row between field-row">
+                      <span>Chữ nằm sau người (giữ nền gốc)</span>
+                      <input type="checkbox" checked={Boolean(selected.textBehind)} onChange={(e) => update(selected.id, { textBehind: e.target.checked })} />
+                    </label>
+                  ) : null}
+                  {selected.textBehind && selected.baseSrc ? (
+                    <div className="muted small">Đang dùng nền gốc của video. Thêm chữ ở mục bên dưới, chữ sẽ nằm giữa nền và người.</div>
+                  ) : (
+                    <>
+                      <label className="row between field-row">
+                        <span>Loại nền</span>
+                        <select
+                          className="select small"
+                          value={bgValue(selected.bg)}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v === 'color') updateBg(selected.id, { type: 'color', src: null, mediaKind: null });
+                            else {
+                              const a = bgAssets.find((x) => x.id === v);
+                              if (a) updateBg(selected.id, { type: 'media', src: a.src, mediaKind: a.kind === 'video' ? 'video' : 'image' });
+                            }
+                          }}
+                        >
+                          <option value="color">Màu trơn</option>
+                          {bgAssets.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.kind === 'video' ? 'Video: ' : 'Ảnh: '}
+                              {(a.prompt || a.id).slice(0, 34)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {!selected.bg || selected.bg.type === 'color' ? (
+                        <div className="row between field-row">
+                          <span>Màu nền</span>
+                          <input type="color" value={(selected.bg || defaultBackground()).color} onChange={(e) => updateBg(selected.id, { type: 'color', color: e.target.value })} />
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </section>
+              ) : null}
 
               <section>
                 <h5>Chuyển cảnh vào</h5>
@@ -344,9 +443,15 @@ export const SceneBuilder: React.FC<Props> = ({ project, setClips, onGoLibrary }
                 onClick={() => seekToClip(i)}
                 title={`Cảnh ${i + 1}`}
               >
-                {c.kind === 'video' ? <video src={`${c.src}#t=${c.trimStart + 0.1}`} muted preload="metadata" /> : <img src={c.src} alt="" />}
+                {c.kind === 'motion' ? (
+                  <img src={thumbOf(c) || undefined} alt="" />
+                ) : c.kind === 'video' ? (
+                  <video className={c.alpha ? 'checker' : ''} src={`${c.src}#t=${c.trimStart + 0.1}`} muted preload="metadata" />
+                ) : (
+                  <img src={c.src} alt="" />
+                )}
                 <div className="tl-info">
-                  {c.kind === 'video' ? <IconFilm size={12} /> : <IconImage size={12} />} {clipLength(c).toFixed(1)}s{c.text ? ' · chữ' : ''}
+                  {c.kind === 'motion' ? <IconPerson size={12} /> : c.kind === 'video' ? <IconFilm size={12} /> : <IconImage size={12} />} {clipLength(c).toFixed(1)}s{c.text ? ' · chữ' : ''}
                 </div>
                 {i > 0 && c.transition !== 'none' ? <div className="tl-trans" title="Chuyển cảnh" /> : null}
               </div>

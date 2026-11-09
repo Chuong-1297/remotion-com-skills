@@ -21,6 +21,17 @@ Web app (giao diện tiếng Việt) theo quy trình kiểu "AI filmmaking": t�
 - Chữ trên cảnh: vị trí, hiệu ứng (hiện dần, trượt lên, bật ra, đánh máy), màu, cỡ, nền.
 - **Xuất MP4** 480p / 720p / 1080p, khung 16:9 hoặc 9:16.
 
+**Tách nền video** (nút kéo trên thẻ video trong Thư viện)
+- Dùng `@remotion/video-matting`, chạy ngay trong trình duyệt bằng GPU (WebGPU), không gửi video đi đâu.
+- Model **MODNet** (người, ~26 MB) hoặc **BEN2** (mọi vật thể, ~219 MB, thử nghiệm).
+- Tạo 2 lớp: người/vật thể với nền trong suốt, và lớp nền gốc. Trên timeline: chọn nền mới (màu, ảnh, video) hoặc bật **Chữ nằm sau người**.
+- Cần Chrome/Edge bản mới trên máy có card đồ hoạ.
+
+**Học chuyển động → nhân vật 3D** (nút hình người trên thẻ video)
+- MediaPipe Pose đọc từng khung hình, ghi lại 33 khớp cơ thể của một người (chạy trong trình duyệt, miễn phí).
+- Clip "Chuyển động" trên timeline điều khiển nhân vật 3D dựng bằng three.js + `@remotion/three`: kiểu ma-nơ-canh / neon / khung dây, màu, góc máy, lật gương, nền phía sau.
+- Video nên thấy rõ toàn thân một người. Nhân vật làm theo động tác cơ thể; ngón tay và biểu cảm khuôn mặt không được ghi lại.
+
 **Chế độ Demo**: khi chưa có Gemini API key, app vẫn chạy đủ quy trình — clip được giả lập bằng Remotion (miễn phí), tiện để thử giao diện và tính năng dựng.
 
 ## Chạy
@@ -61,6 +72,7 @@ Rồi mở http://localhost:5173.
 |------|---------|
 | `GEMINI_API_KEY` | Key mặc định của server (tuỳ chọn) |
 | `PORT` | Cổng server, mặc định `3123` |
+| `REMOTION_GL` | Bộ dựng WebGL khi render cảnh 3D: `angle` (mặc định, dùng GPU) hoặc `swangle` (phần mềm, cho máy chủ không có GPU) |
 | `REMOTION_BROWSER_EXECUTABLE` | Đường dẫn Chrome/Chromium có sẵn, nếu máy không tải được Chrome Headless Shell của Remotion |
 
 ## Cấu trúc

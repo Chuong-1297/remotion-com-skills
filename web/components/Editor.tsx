@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Asset, AspectRatio, Project, SceneClip } from '../../src/flow/types';
+import { defaultBackground, defaultPose } from '../../src/flow/types';
 import { api, grabVideoFrame, probeVideoDuration } from '../api';
 import { IconArrowLeft, IconDownload, IconGrid, IconSettings, IconTimeline } from '../icons';
 import { Composer, ComposerState, defaultComposer } from './Composer';
@@ -7,6 +8,8 @@ import { Library } from './Library';
 import { SceneBuilder } from './SceneBuilder';
 import { SettingsDialog } from './SettingsDialog';
 import { ExportDialog } from './ExportDialog';
+import { MatteDialog } from './MatteDialog';
+import { MotionDialog } from './MotionDialog';
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
@@ -18,6 +21,8 @@ export const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ pr
   const [showSettings, setShowSettings] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [matteAsset, setMatteAsset] = useState<Asset | null>(null);
+  const [motionAsset, setMotionAsset] = useState<Asset | null>(null);
   const saveTimer = useRef<number | null>(null);
 
   const flash = (msg: string) => {
@@ -85,19 +90,27 @@ export const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ pr
     if (!asset.src) return;
     let duration = asset.durationSec;
     if (asset.kind === 'video') duration = (await probeVideoDuration(asset.src)) || asset.durationSec || 8;
+    const timed = asset.kind !== 'image';
+    const isFg = asset.kind === 'video' && asset.role === 'foreground';
+    const base = isFg && asset.pairId ? project.assets.find((a) => a.pairId === asset.pairId && a.role === 'base') : undefined;
     const clip: SceneClip = {
       id: newId(),
       assetId: asset.id,
       kind: asset.kind,
       src: asset.src,
-      sourceDuration: asset.kind === 'video' ? duration : 0,
+      sourceDuration: timed ? duration : 0,
       trimStart: 0,
-      trimEnd: asset.kind === 'video' ? duration : 4,
+      trimEnd: timed ? duration : 4,
       volume: 1,
       kenBurns: asset.kind === 'image' ? 'zoomIn' : 'none',
       text: null,
       transition: project.clips.length ? 'fade' : 'none',
       transitionDuration: 0.5,
+      alpha: isFg,
+      baseSrc: base && base.src ? base.src : null,
+      textBehind: false,
+      bg: isFg || asset.kind === 'motion' ? defaultBackground() : null,
+      pose: asset.kind === 'motion' ? defaultPose() : null,
     };
     setClips((c) => [...c, clip]);
     flash('Đã thêm vào cảnh');
@@ -208,6 +221,8 @@ export const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ pr
             onExtend={extend}
             onReuse={reuse}
             onDelete={deleteAsset}
+            onMatte={setMatteAsset}
+            onLearnMotion={setMotionAsset}
             onUploaded={(p) => setProject((cur) => (cur ? { ...cur, assets: p.assets } : p))}
             onError={setError}
           />
@@ -229,6 +244,22 @@ export const Editor: React.FC<{ projectId: string; onBack: () => void }> = ({ pr
       {toast ? <div className="toast">{toast}</div> : null}
       {showSettings ? <SettingsDialog onClose={() => setShowSettings(false)} /> : null}
       {showExport ? <ExportDialog project={project} onClose={() => setShowExport(false)} /> : null}
+      {matteAsset ? (
+        <MatteDialog
+          project={project}
+          asset={matteAsset}
+          onClose={() => setMatteAsset(null)}
+          onDone={(p) => setProject((cur) => (cur ? { ...cur, assets: p.assets } : p))}
+        />
+      ) : null}
+      {motionAsset ? (
+        <MotionDialog
+          project={project}
+          asset={motionAsset}
+          onClose={() => setMotionAsset(null)}
+          onDone={(p) => setProject((cur) => (cur ? { ...cur, assets: p.assets } : p))}
+        />
+      ) : null}
     </div>
   );
 };

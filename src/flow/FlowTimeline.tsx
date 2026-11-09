@@ -16,7 +16,8 @@ import { wipe } from '@remotion/transitions/wipe';
 import { flip } from '@remotion/transitions/flip';
 import { clockWipe } from '@remotion/transitions/clock-wipe';
 import { iris } from '@remotion/transitions/iris';
-import { FlowTimelineProps, KenBurns, SceneClip, TextOverlay, TransitionType, buildTimeline } from './types';
+import { ClipBackground, FlowTimelineProps, KenBurns, SceneClip, TextOverlay, TransitionType, buildTimeline, defaultPose } from './types';
+import { PoseCharacter } from './PoseCharacter';
 
 const resolveSrc = (src: string, baseUrl: string) => (/^(https?:|data:|blob:)/.test(src) ? src : baseUrl + src);
 
@@ -90,21 +91,70 @@ const Caption: React.FC<{ text: TextOverlay }> = ({ text }) => {
   );
 };
 
+const BackgroundLayer: React.FC<{ bg: ClipBackground | null | undefined; baseUrl: string }> = ({ bg, baseUrl }) => {
+  if (!bg || bg.type === 'none') return null;
+  if (bg.type === 'color' || !bg.src) return <AbsoluteFill style={{ backgroundColor: bg.color }} />;
+  const src = resolveSrc(bg.src, baseUrl);
+  return bg.mediaKind === 'video' ? (
+    <AbsoluteFill>
+      <OffthreadVideo src={src} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+    </AbsoluteFill>
+  ) : (
+    <KenBurnsImage src={src} mode="none" />
+  );
+};
+
 const ClipView: React.FC<{ clip: SceneClip; trimBefore: number; baseUrl: string }> = ({ clip, trimBefore, baseUrl }) => {
   const src = resolveSrc(clip.src, baseUrl);
+  const caption = clip.text && clip.text.content.trim() ? <Caption text={clip.text} /> : null;
+  const trim = trimBefore > 0 ? trimBefore : undefined;
+
+  if (clip.kind === 'motion') {
+    return (
+      <AbsoluteFill style={{ backgroundColor: '#000' }}>
+        <BackgroundLayer bg={clip.bg} baseUrl={baseUrl} />
+        <PoseCharacter src={src} trimBeforeFrames={trimBefore} options={clip.pose || defaultPose()} />
+        {caption}
+      </AbsoluteFill>
+    );
+  }
+
+  if (clip.kind === 'video' && clip.alpha) {
+    // Matted foreground: background (or the original base layer) behind, optional caption between.
+    const useBase = Boolean(clip.textBehind && clip.baseSrc);
+    return (
+      <AbsoluteFill style={{ backgroundColor: '#000' }}>
+        {useBase ? (
+          <AbsoluteFill>
+            <OffthreadVideo src={resolveSrc(clip.baseSrc!, baseUrl)} trimBefore={trim} volume={clip.volume} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </AbsoluteFill>
+        ) : (
+          <BackgroundLayer bg={clip.bg} baseUrl={baseUrl} />
+        )}
+        {useBase ? caption : null}
+        <AbsoluteFill>
+          <OffthreadVideo
+            src={src}
+            transparent
+            muted={useBase}
+            trimBefore={trim}
+            volume={clip.volume}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        </AbsoluteFill>
+        {useBase ? null : caption}
+      </AbsoluteFill>
+    );
+  }
+
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
       {clip.kind === 'video' ? (
-        <OffthreadVideo
-          src={src}
-          trimBefore={trimBefore > 0 ? trimBefore : undefined}
-          volume={clip.volume}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-        />
+        <OffthreadVideo src={src} trimBefore={trim} volume={clip.volume} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : (
         <KenBurnsImage src={src} mode={clip.kenBurns} />
       )}
-      {clip.text && clip.text.content.trim() ? <Caption text={clip.text} /> : null}
+      {caption}
     </AbsoluteFill>
   );
 };

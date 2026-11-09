@@ -20,11 +20,35 @@ export interface TextOverlay {
   background: boolean;
 }
 
+/** What is drawn behind a transparent clip (matted video or 3D motion character). */
+export interface ClipBackground {
+  type: 'none' | 'color' | 'media';
+  color: string;
+  src: string | null;
+  mediaKind: 'image' | 'video' | null;
+}
+
+export type PoseStyle = 'mannequin' | 'neon' | 'wire';
+
+export interface PoseOptions {
+  style: PoseStyle;
+  color: string;
+  mirror: boolean;
+  cameraAngle: number; // degrees around the character
+}
+
+/** One frame of MediaPipe world landmarks: 33 joints, flattened [x,y,z,...] in meters (hip-centred). */
+export interface MotionData {
+  fps: number;
+  frames: Array<number[] | null>;
+  source: string;
+}
+
 /** A clip on the scene-builder timeline. Times are in seconds. */
 export interface SceneClip {
   id: string;
   assetId: string | null;
-  kind: 'video' | 'image';
+  kind: 'video' | 'image' | 'motion';
   src: string; // "/media/xyz.mp4" (relative to the server)
   sourceDuration: number; // full length of the source video (images: 0)
   trimStart: number;
@@ -34,17 +58,25 @@ export interface SceneClip {
   text: TextOverlay | null;
   transition: TransitionType; // transition INTO this clip from the previous one
   transitionDuration: number;
+  // Optional, added for background removal and motion clips.
+  alpha?: boolean; // video has a transparent background (matted foreground)
+  baseSrc?: string | null; // opaque base layer paired with a matted foreground
+  textBehind?: boolean; // draw the caption between base and foreground
+  bg?: ClipBackground | null;
+  pose?: PoseOptions | null;
 }
 
 export type GenMode = 'text' | 'frames' | 'ingredients' | 'extend' | 'image';
 
+export type AssetRole = 'base' | 'foreground' | 'motion' | null;
+
 export interface Asset {
   id: string;
-  kind: 'video' | 'image';
+  kind: 'video' | 'image' | 'motion';
   status: 'pending' | 'done' | 'error';
   src: string | null;
   prompt: string;
-  mode: GenMode | 'upload';
+  mode: GenMode | 'upload' | 'matte' | 'motion';
   model: string;
   aspect: AspectRatio;
   durationSec: number;
@@ -52,6 +84,10 @@ export interface Asset {
   createdAt: number;
   mock: boolean;
   canExtend: boolean;
+  thumb?: string | null;
+  role?: AssetRole;
+  pairId?: string | null; // links a matted foreground with its base
+  sourceAssetId?: string | null;
 }
 
 export interface Project {
@@ -72,6 +108,9 @@ export const dimensionsFor = (aspect: AspectRatio, height = 720) => {
   }
   return { width: Math.round((height * 16) / 9), height };
 };
+
+export const defaultBackground = (): ClipBackground => ({ type: 'color', color: '#101418', src: null, mediaKind: null });
+export const defaultPose = (): PoseOptions => ({ style: 'mannequin', color: '#f0a04b', mirror: false, cameraAngle: 0 });
 
 /** Length a clip occupies on the timeline, in seconds. */
 export const clipLength = (c: SceneClip) => {
@@ -100,7 +139,7 @@ export const buildTimeline = (clips: SceneClip[], fps = FPS): TimelineItem[] => 
     items.push({
       clip,
       durationInFrames,
-      trimBeforeFrames: clip.kind === 'video' ? Math.round(clip.trimStart * fps) : 0,
+      trimBeforeFrames: clip.kind === 'image' ? 0 : Math.round(clip.trimStart * fps),
       transitionFrames,
     });
   }
