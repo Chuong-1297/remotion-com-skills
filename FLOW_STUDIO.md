@@ -73,3 +73,7 @@ flow-data/           # Dữ liệu dự án và media (tự tạo, đã gitignor
 ```
 
 Composition `FlowTimeline` và `FlowMockClip` cũng xuất hiện trong Remotion Studio (`npm run dev`) ở thư mục **FlowStudio**.
+
+## Bản chạy trong Claude (Artifact)
+
+`artifact/flow-studio.html` là bản rút gọn chạy hoàn toàn trong trình duyệt: tải ảnh, nhờ Claude lên kịch bản bằng prompt, chỉnh cảnh / chữ / chuyển cảnh và xuất MP4/WebM. Đã đăng tại https://claude.ai/artifact/N1np64qtRcVLNUt4tJ3TQy (riêng tư, chia sẻ qua menu Share).
