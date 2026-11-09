@@ -136,6 +136,15 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
 .modal video { width: 100%; border-radius: 8px; background: #000; max-height: 45vh; }
 .modal-acts { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 
+/* AI features */
+.checker { background-color: #24221f; background-image: linear-gradient(45deg, #34312d 25%, transparent 25%), linear-gradient(-45deg, #34312d 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #34312d 75%), linear-gradient(-45deg, transparent 75%, #34312d 75%); background-size: 14px 14px; background-position: 0 0, 0 7px, 7px -7px, -7px 0; }
+.ai-canvas { width: 100%; max-height: 40vh; object-fit: contain; border-radius: 8px; background-color: #000; }
+.ai-msg { font-size: 13px; }
+.ov-item { border: 1px solid var(--rule); border-radius: 8px; padding: 6px 8px; display: grid; gap: 8px; }
+.ov-item.open { border-color: var(--tungsten); }
+.ov-head { display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; font-weight: 600; font-size: 13px; flex: 1; text-align: left; }
+.ov-head img { width: 30px; height: 30px; object-fit: contain; border-radius: 5px; }
+.media .acts { gap: 3px; }
 @media (max-width: 960px) {
   html, body { height: auto; }
   .app { height: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: none;
@@ -161,6 +170,8 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></symbol>
   <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
   <symbol id="i-film" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 8h5M2 16h5M17 8h5M17 16h5"/></symbol>
+  <symbol id="i-cut" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></symbol>
+  <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="4.5" r="2"/><path d="M12 7v6M8 21l4-8 4 8M6 10l6-2 6 2"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
 </svg>
 
@@ -359,7 +370,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
     clearTimeout(saveT);
     saveT = setTimeout(() => {
       try {
-        const data = { title: state.title, aspect: state.aspect, media: state.media.filter((m) => !m.example).map((m) => (m.kind === 'video' ? Object.assign({}, m, { url: null }) : m)), scenes: state.scenes };
+        const data = { title: state.title, aspect: state.aspect, media: state.media.filter((m) => !m.example).map((m) => (m.kind === 'video' || m.idb ? Object.assign({}, m, { url: null }) : m)), scenes: state.scenes };
         localStorage.setItem(STORE, JSON.stringify(data));
       } catch (e) {
         if (!saveWarned) { saveWarned = true; setStatus('Bộ nhớ trình duyệt đầy hoặc bị chặn: dự án chỉ giữ trong phiên này.', 'err'); }
@@ -424,7 +435,9 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
     g.globalAlpha = o.alpha == null ? 1 : o.alpha;
     g.translate(W / 2 + (o.dx || 0), H / 2);
     if (o.scale) g.scale(o.scale, o.scale);
-    if (im) {
+    if (m && m.kind === 'motion') {
+      drawChar3D(g, s, lt, W, H);
+    } else if (im) {
       const p = ease(clamp(lt / s.dur, 0, 1));
       let z = 1, ox = 0, oy = 0, rot = 0; const a = 0.055;
       switch (s.motion) {
@@ -442,11 +455,16 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
       g.save(); g.rotate(rot);
       const f = [FILTER_CSS[s.filter] || '', o.blur ? `blur(${o.blur}px)` : ''].join(' ').trim();
       g.filter = f || 'none';
-      g.drawImage(im, -dw / 2 + ox, -dh / 2 + oy, dw, dh);
+      if (s.removeBg) {
+        g.filter = 'none'; drawBgCentered(g, s, W, H); g.filter = f || 'none';
+        const pl = personLayer(s, im);
+        g.drawImage(pl || im, -dw / 2 + ox, -dh / 2 + oy, dw, dh);
+      } else g.drawImage(im, -dw / 2 + ox, -dh / 2 + oy, dw, dh);
       g.filter = 'none';
       g.restore();
     } else { g.fillStyle = '#1a1816'; g.fillRect(-W / 2, -H / 2, W, H); }
     g.translate(-W / 2, -H / 2);
+    drawOverlays(g, s, lt, W, H);
     drawText(g, s, lt, W, H);
     g.restore();
   }
@@ -563,13 +581,15 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
   function renderBin() {
     $('mediaCount').textContent = state.media.length + ' tệp';
     $('binGrid').innerHTML = state.media.map((m, i) => `
-      <div class="media" data-id="${m.id}">
-        <img src="${m.thumb || m.url}" alt="${esc(m.name)}">
+      <div class="media${m.cutout ? ' cut checker' : ''}" data-id="${m.id}">
+        <img src="${m.thumb || m.url}" alt="${esc(m.name)}" style="${m.cutout ? 'object-fit:contain' : ''}">
         ${m.example ? '<span class="tag">Mẫu</span>' : `<span class="tag">#${i + 1}</span>`}
-        ${m.kind === 'video' ? `<span class="tag r">${fmt(m.duration)}</span>` : ''}
+        ${m.kind === 'video' || m.kind === 'motion' ? `<span class="tag r">${m.kind === 'motion' ? '3D ' : ''}${fmt(m.duration)}</span>` : ''}
         <div class="acts">
           <button data-act="add" data-id="${m.id}"><svg class="i" style="width:12px;height:12px"><use href="#i-plus"/></svg>Thêm</button>
-          <button class="x" data-act="rm" data-id="${m.id}" aria-label="Xoá ảnh"><svg class="i" style="width:12px;height:12px"><use href="#i-x"/></svg></button>
+          ${m.kind === 'image' && !m.cutout ? `<button class="x" data-act="cut" data-id="${m.id}" title="Tách nền nhân vật" aria-label="Tách nền"><svg class="i" style="width:12px;height:12px"><use href="#i-cut"/></svg></button>` : ''}
+          ${m.kind === 'video' ? `<button class="x" data-act="learn" data-id="${m.id}" title="Học chuyển động" aria-label="Học chuyển động"><svg class="i" style="width:12px;height:12px"><use href="#i-person"/></svg></button>` : ''}
+          <button class="x" data-act="rm" data-id="${m.id}" aria-label="Xoá"><svg class="i" style="width:12px;height:12px"><use href="#i-x"/></svg></button>
         </div>
       </div>`).join('');
   }
@@ -589,7 +609,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
       return `<button class="clip" draggable="true" data-id="${s.id}" aria-selected="${s.id === selectedId}" style="width:${w}px" title="Cảnh ${i + 1}">
         ${m ? `<img src="${m.thumb || m.url}" alt="">` : ''}
         ${i > 0 && s.trans !== 'none' ? '<span class="tx"></span>' : ''}
-        <span class="num">${i + 1}</span><span class="meta">${m && m.kind === 'video' ? 'video · ' : ''}${s.dur.toFixed(1)}s${s.text && s.text.content ? ' · chữ' : ''}</span></button>`;
+        <span class="num">${i + 1}</span><span class="meta">${m && m.kind === 'motion' ? '3D · ' : m && m.kind === 'video' ? 'video · ' : ''}${s.dur.toFixed(1)}s${s.text && s.text.content ? ' · chữ' : ''}</span></button>`;
     }).join('') + '<div class="playhead" id="playhead"></div>';
     placePlayhead();
   }
@@ -608,8 +628,8 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
     if (s) { $('mvL').disabled = idx <= 0; $('mvR').disabled = idx >= state.scenes.length - 1; }
     $('inspTitle').textContent = s ? `Cảnh ${idx + 1}` : 'Cảnh';
     if (!s) { $('inspBody').innerHTML = '<div class="empty-note">Chọn một cảnh trên timeline để chỉnh thời lượng, chuyển động, màu, chữ và chuyển cảnh.</div>'; return; }
-    const tx = s.text; const m = mediaById(s.mediaId); const isVid = !!(m && m.kind === 'video');
-    $('inspTitle').textContent = `Cảnh ${idx + 1}${isVid ? ' · video' : ''}`;
+    const tx = s.text; const m = mediaById(s.mediaId); const isVid = !!(m && (m.kind === 'video' || m.kind === 'motion'));
+    $('inspTitle').textContent = `Cảnh ${idx + 1}${m && m.kind === 'motion' ? ' · nhân vật 3D' : isVid ? ' · video' : ''}`;
     $('inspBody').innerHTML = `
       <section>
         ${isVid ? `
@@ -617,13 +637,14 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
           <input type="range" id="f-trim" min="0" max="${Math.max(0, m.duration - 0.5).toFixed(1)}" step="0.1" value="${s.trimStart}"></div>
         <div class="rng"><div class="row"><span class="lbl">Thời lượng</span><span class="tc" id="durV">${s.dur.toFixed(1)}s</span></div>
           <input type="range" id="f-dur" min="0.5" max="${Math.max(0.5, Math.min(30, m.duration - s.trimStart)).toFixed(1)}" step="0.1" value="${s.dur}"></div>
-        <div class="rng"><div class="row"><span class="lbl">Âm lượng</span><span class="tc" id="volV">${Math.round(s.volume * 100)}%</span></div>
-          <input type="range" id="f-vol" min="0" max="1" step="0.05" value="${s.volume}"></div>` : `
+        ${m.kind === 'video' ? `<div class="rng"><div class="row"><span class="lbl">Âm lượng</span><span class="tc" id="volV">${Math.round(s.volume * 100)}%</span></div>
+          <input type="range" id="f-vol" min="0" max="1" step="0.05" value="${s.volume}"></div>` : ''}` : `
         <div class="rng"><div class="row"><span class="lbl">Thời lượng</span><span class="tc" id="durV">${s.dur.toFixed(1)}s</span></div>
           <input type="range" id="f-dur" min="1" max="12" step="0.5" value="${s.dur}"></div>`}
         <div class="row"><label for="f-motion">Chuyển động</label><select class="sel" id="f-motion">${opts(MOTIONS, s.motion)}</select></div>
         <div class="row"><label for="f-filter">Màu</label><select class="sel" id="f-filter">${opts(FILTERS, s.filter)}</select></div>
       </section>
+      ${aiSections(s, m)}
       <section>
         <span class="eyebrow">Chuyển cảnh vào</span>
         ${idx === 0 ? '<span class="lbl">Cảnh đầu không có chuyển cảnh.</span>' : `
@@ -756,7 +777,7 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
       fr.onload = () => { const im = new Image(); im.onload = () => {
         const s = Math.min(1, max / Math.max(im.width, im.height)); const c = document.createElement('canvas');
         c.width = Math.round(im.width * s); c.height = Math.round(im.height * s); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
-        res(c.toDataURL('image/jpeg', q)); }; im.onerror = rej; im.src = fr.result; };
+        res(/png|webp|gif/.test(file.type) ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', q)); }; im.onerror = rej; im.src = fr.result; };
       fr.onerror = rej; fr.readAsDataURL(file);
     });
   }
@@ -772,12 +793,16 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
     const b = e.target.closest('button[data-act]'); if (!b) return;
     const id = b.dataset.id;
     if (b.dataset.act === 'add') {
-      const mm = mediaById(id); const isV = mm && mm.kind === 'video';
-      const sc = newScene(id, Object.assign({ trans: state.scenes.length ? 'fade' : 'none' }, isV ? { motion: 'none', dur: Math.min(8, Math.max(0.5, mm.duration)) } : {}));
+      const mm = mediaById(id); const isV = mm && (mm.kind === 'video' || mm.kind === 'motion');
+      const sc = newScene(id, Object.assign({ trans: state.scenes.length ? 'fade' : 'none' }, isV ? { motion: 'none', dur: Math.min(8, Math.max(0.5, mm.duration)) } : {},
+        mm && mm.kind === 'motion' ? { char: { cam: 20, mirror: false }, bg: { type: 'color', color: '#1d2430', mediaId: null } } : {}));
       state.scenes.push(sc); selectedId = sc.id; changed({ insp: true }); seekToScene(state.scenes.length - 1);
+    } else if (b.dataset.act === 'cut') { cutoutMedia(id);
+    } else if (b.dataset.act === 'learn') { learnMotion(id);
     } else if (b.dataset.act === 'rm') {
       const gone = mediaById(id);
-      if (gone && gone.kind === 'video') { idb.del(id).catch(() => {}); if (gone.url) URL.revokeObjectURL(gone.url); }
+      if (gone && (gone.kind === 'video' || gone.idb)) { idb.del(id).catch(() => {}); if (gone.url && gone.url.startsWith('blob:')) URL.revokeObjectURL(gone.url); }
+      state.scenes.forEach((sc) => { if (sc.overlays) sc.overlays = sc.overlays.filter((o) => o.mediaId !== id && o.motionId !== id); });
       state.media = state.media.filter((m) => m.id !== id);
       state.scenes = state.scenes.filter((s) => s.mediaId !== id);
       if (!sel()) selectedId = null;
@@ -885,7 +910,7 @@ Quy tắc: chỉ dùng index có thật; một tệp có thể dùng nhiều l�
     if (!sample) { setStatus('Claude không khả dụng ở chế độ xem này (cần mở trang khi đã đăng nhập claude.ai). Bạn vẫn có thể dựng tay.', 'err'); return; }
     genBusy = true; $('genBtn').disabled = true; pause();
     try {
-      let mediaForClaude = state.media.slice();
+      let mediaForClaude = state.media.filter((x) => x.kind !== 'motion');
       let images;
       if ($('sendImgs').checked) {
         const lim = await sample.limits().catch(() => ({}));
@@ -950,6 +975,7 @@ Quy tắc: chỉ dùng index có thật; một tệp có thể dùng nhiều l�
     const stream = cv.captureStream(30);
     const hasAudio = !!(audio && (music || state.scenes.some((s) => { const m = mediaById(s.mediaId); return m && m.kind === 'video' && s.volume > 0; })));
     if (hasAudio) audio.rec.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
+    try { await prepareAI(); } catch (e) { recording = false; modal.hidden = true; applyAspect(); setStatus('Không tải được phần AI cần cho video: ' + e.message, 'err'); return; }
     syncVideos(0, false); await new Promise((r) => setTimeout(r, 500));
     const rec = new MediaRecorder(stream, Object.assign({ videoBitsPerSecond: H >= 1080 ? 10e6 : 6e6 }, mime ? { mimeType: mime } : {}));
     const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
@@ -995,6 +1021,544 @@ Quy tắc: chỉ dùng index có thật; một tệp có thể dùng nhiều l�
     }
   });
 
+  // ---------- AI: background removal, motion learning, puppets, 3D character ----------
+  // MediaPipe runtime and models ship as files next to this page (mp/, models/); the JS bundle and three.js come from jsDelivr.
+  const AI = { seg: null, pose: null, three: null, loading: {} };
+  const motionCache = {};
+  let mpTs = 0;
+  const nextTs = () => (mpTs = Math.max(mpTs + 1, Math.floor(performance.now())));
+  const rel = (p) => { try { return new URL(p, document.baseURI).href; } catch (e) { return p; } };
+  let mpPromise = null;
+  function loadMP() {
+    if (!mpPromise) {
+      mpPromise = (async () => {
+        const mod = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/vision_bundle.mjs');
+        const fileset = await mod.FilesetResolver.forVisionTasks(rel('mp').replace(/\/$/, ''));
+        return { mod, fileset };
+      })();
+      mpPromise.catch(() => { mpPromise = null; });
+    }
+    return mpPromise;
+  }
+  // Binary model files ship base64-encoded as .txt (artifacts serve text, not arbitrary binaries).
+  const fetchBytes = async (p) => {
+    const r = await fetch(rel(p)); if (!r.ok) throw new Error('Không tải được ' + p);
+    const bin = atob((await r.text()).trim()); const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  };
+  function once(key, fn) {
+    if (!AI.loading[key]) { AI.loading[key] = fn(); AI.loading[key].catch(() => { delete AI.loading[key]; }); }
+    return AI.loading[key];
+  }
+  const loadSeg = () => once('seg', async () => {
+    const { mod, fileset } = await loadMP();
+    const buf = await fetchBytes('models/selfie_segmenter.b64.txt');
+    const mk = (delegate) => mod.ImageSegmenter.createFromOptions(fileset, { baseOptions: { modelAssetBuffer: buf, delegate }, runningMode: 'VIDEO', outputConfidenceMasks: true, outputCategoryMask: false });
+    try { AI.seg = await mk('GPU'); } catch (e) { AI.seg = await mk('CPU'); }
+    return AI.seg;
+  });
+  const loadPose = () => once('pose', async () => {
+    const { mod, fileset } = await loadMP();
+    const buf = await fetchBytes('models/pose_landmarker_lite.b64.txt');
+    const mk = (delegate) => mod.PoseLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetBuffer: buf, delegate }, runningMode: 'VIDEO', numPoses: 1 });
+    try { AI.pose = await mk('GPU'); } catch (e) { AI.pose = await mk('CPU'); }
+    return AI.pose;
+  });
+
+  // ----- masks -----
+  function maskFrom(result) {
+    const mk = result && result.confidenceMasks && result.confidenceMasks[0];
+    if (!mk) return null;
+    const w = mk.width, h = mk.height, data = mk.getAsFloat32Array();
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d'); const img = x.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) img.data[i * 4 + 3] = clamp((data[i] - 0.35) / 0.3, 0, 1) * 255;
+    x.putImageData(img, 0, 0);
+    if (result.close) result.close(); else result.confidenceMasks.forEach((m) => m.close());
+    return c;
+  }
+  function cutOut(src, maxSide) {
+    const iw = src.videoWidth || src.naturalWidth || src.width, ih = src.videoHeight || src.naturalHeight || src.height;
+    if (!iw || !ih) return null;
+    const mask = maskFrom(AI.seg.segmentForVideo(src, nextTs()));
+    if (!mask) return null;
+    const k = Math.min(1, maxSide / Math.max(iw, ih));
+    const c = document.createElement('canvas'); c.width = Math.round(iw * k); c.height = Math.round(ih * k);
+    const x = c.getContext('2d'); x.drawImage(src, 0, 0, c.width, c.height);
+    x.globalCompositeOperation = 'destination-in'; x.imageSmoothingQuality = 'high'; x.drawImage(mask, 0, 0, c.width, c.height);
+    x.globalCompositeOperation = 'source-over';
+    return c;
+  }
+  const segCache = new Map();
+  function personLayer(s, src) {
+    if (!AI.seg) { loadSeg().then(() => draw()).catch((e) => setStatus('Không tải được AI tách nền: ' + e.message, 'err')); return null; }
+    const key = s.id + ':' + (src.videoWidth ? Math.round(src.currentTime * 30) : 'img');
+    let c = segCache.get(key);
+    if (!c) {
+      c = cutOut(src, 1280);
+      if (!c) return null;
+      segCache.set(key, c);
+      if (segCache.size > 60) segCache.delete(segCache.keys().next().value);
+    }
+    return c;
+  }
+  function drawBgCentered(g, s, W, H) {
+    const bg = s.bg || { type: 'color', color: '#1d2430' };
+    const bi = bg.type === 'media' ? imgCache[bg.mediaId] : null;
+    if (bi) { const c = Math.max(W / bi.width, H / bi.height); g.drawImage(bi, (-bi.width * c) / 2, (-bi.height * c) / 2, bi.width * c, bi.height * c); }
+    else { g.fillStyle = bg.color || '#1d2430'; g.fillRect(-W / 2, -H / 2, W, H); }
+  }
+  function alphaBox(c) {
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+    for (let y = 0; y < c.height; y += 2) for (let x = 0; x < c.width; x += 2) if (d[(y * c.width + x) * 4 + 3] > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) return null;
+    const pad = 4; x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(c.width - 1, x1 + pad); y1 = Math.min(c.height - 1, y1 + pad);
+    return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  }
+
+  // ----- modal for long AI jobs -----
+  function aiModal(title, msg) {
+    const wrap = document.createElement('div'); wrap.className = 'scrim';
+    wrap.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><h3>${esc(title)}</h3><canvas class="ai-canvas"></canvas><div class="bar"><div></div></div><p class="ai-msg"></p><div class="modal-acts"><button class="btn ai-close">Huỷ</button></div></div>`;
+    document.body.appendChild(wrap);
+    const ui = { cancelled: false, canvas: wrap.querySelector('canvas'), finished: false };
+    const msgEl = wrap.querySelector('.ai-msg'), bar = wrap.querySelector('.bar div'), btn = wrap.querySelector('.ai-close');
+    msgEl.textContent = msg;
+    btn.addEventListener('click', () => { if (!ui.finished) ui.cancelled = true; wrap.remove(); });
+    ui.progress = (p, m) => { bar.style.width = Math.round(p * 100) + '%'; if (m) msgEl.textContent = m; };
+    ui.done = (m) => { ui.finished = true; bar.style.width = '100%'; msgEl.textContent = m; btn.textContent = 'Đóng'; };
+    ui.error = (m) => { ui.finished = true; msgEl.textContent = m; msgEl.style.color = 'var(--cut)'; btn.textContent = 'Đóng'; };
+    return ui;
+  }
+  const seekEl = (v, t) => new Promise((r) => { const f = () => { v.removeEventListener('seeked', f); r(); }; v.addEventListener('seeked', f); v.currentTime = t; });
+  const BONES2D = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24], [23, 25], [25, 27], [24, 26], [26, 28]];
+  function drawSkeleton2D(x, lm, w, h) {
+    x.strokeStyle = '#f0a04b'; x.lineWidth = 3;
+    for (const [a, b] of BONES2D) { x.beginPath(); x.moveTo(lm[a].x * w, lm[a].y * h); x.lineTo(lm[b].x * w, lm[b].y * h); x.stroke(); }
+    x.fillStyle = '#fff'; for (const p of lm) { x.beginPath(); x.arc(p.x * w, p.y * h, 2.5, 0, 7); x.fill(); }
+  }
+
+  async function cutoutMedia(id) {
+    const m = mediaById(id), im = imgCache[id];
+    if (!m || !im) return;
+    const ui = aiModal('Tách nền ảnh', 'Đang tải AI tách nền (chỉ lần đầu)…');
+    try {
+      await loadSeg();
+      if (ui.cancelled) return;
+      ui.progress(0.6, 'Đang tách nền…');
+      const c = cutOut(im, 2048);
+      const box = c && alphaBox(c);
+      if (!box || box.w < 8 || box.h < 8) throw new Error('Không tìm thấy người trong ảnh. AI này tách nền người; ảnh chân dung hoặc toàn thân rõ nét cho kết quả tốt nhất.');
+      const out = document.createElement('canvas'); out.width = box.w; out.height = box.h;
+      out.getContext('2d').drawImage(c, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
+      const prev = ui.canvas; prev.width = out.width; prev.height = out.height; prev.classList.add('checker'); prev.getContext('2d').drawImage(out, 0, 0);
+      const blob = await new Promise((r) => out.toBlob(r, 'image/png'));
+      const nm = { id: uid(), kind: 'image', name: m.name + ' (đã tách nền)', url: URL.createObjectURL(blob), cutout: true, idb: true, example: false };
+      try { await idb.put(nm.id, blob); } catch (e) { nm.idb = false; nm.url = out.toDataURL('image/png'); }
+      state.media.push(nm); await loadImage(nm); renderBin(); save();
+      ui.done('Đã lưu ảnh nền trong suốt vào Thư viện. Chọn một cảnh → “Nhân vật đặt vào cảnh” để đặt vào video.');
+    } catch (e) { ui.error('Tách nền thất bại: ' + e.message); }
+  }
+
+  async function learnMotion(id) {
+    const m = mediaById(id);
+    if (!m || !m.url) return;
+    const ui = aiModal('Học chuyển động từ video', 'Đang tải AI nhận dạng dáng người (chỉ lần đầu)…');
+    try {
+      const pose = await loadPose();
+      const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = m.url;
+      await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = () => rej(new Error('Không đọc được video')); });
+      const fps = 15, dur = v.duration, total = Math.max(1, Math.floor(dur * fps));
+      const c = ui.canvas, k = Math.min(1, 420 / Math.max(v.videoWidth, v.videoHeight));
+      c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
+      const x = c.getContext('2d');
+      const frames = []; let found = 0, thumb = null;
+      for (let i = 0; i < total; i++) {
+        if (ui.cancelled) return;
+        await seekEl(v, Math.min(i / fps, dur - 0.001));
+        const r = pose.detectForVideo(v, nextTs());
+        const wl = r.worldLandmarks && r.worldLandmarks[0], sl = r.landmarks && r.landmarks[0];
+        if (wl) { found++; const f = []; for (const p of wl) f.push(+p.x.toFixed(4), +p.y.toFixed(4), +p.z.toFixed(4)); frames.push(f); } else frames.push(null);
+        x.drawImage(v, 0, 0, c.width, c.height);
+        if (sl) { drawSkeleton2D(x, sl, c.width, c.height); if (!thumb && i >= total / 3) thumb = c.toDataURL('image/jpeg', 0.8); }
+        ui.progress((i + 1) / total, `Đang học… ${i + 1}/${total} khung hình (nhận ra người ở ${found})`);
+      }
+      if (found < total * 0.2) throw new Error('Không nhận ra người trong phần lớn video. Hãy dùng video thấy rõ một người.');
+      const data = { fps, frames };
+      const nm = { id: uid(), kind: 'motion', name: 'Chuyển động: ' + m.name, thumb: thumb || c.toDataURL('image/jpeg', 0.8), duration: dur, idb: true, example: false };
+      motionCache[nm.id] = data;
+      let note = '';
+      try { await idb.put(nm.id, new Blob([JSON.stringify(data)], { type: 'application/json' })); } catch (e) { nm.idb = false; note = ' (chỉ giữ trong phiên này)'; }
+      state.media.push(nm); await loadImage(nm); renderBin(); save();
+      ui.done(`Xong${note}: nhận ra người ở ${found}/${total} khung hình. Bấm “Thêm” trên thẻ chuyển động để có cảnh nhân vật 3D, hoặc cho nhân vật trong ảnh làm theo.`);
+    } catch (e) { ui.error('Không học được chuyển động: ' + e.message); }
+  }
+
+  // ----- rest pose of a character picture -----
+  function estimateRig(im) {
+    const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; c.getContext('2d').drawImage(im, 0, 0);
+    const b = alphaBox(c) || { x: 0, y: 0, w: im.width, h: im.height };
+    const H = b.h, cx = b.x + b.w / 2, y0 = b.y, P = new Array(66).fill(0);
+    const set = (i, px, py) => { P[i * 2] = px; P[i * 2 + 1] = py; };
+    for (let i = 0; i < 33; i++) set(i, cx, y0 + H * 0.1);
+    set(0, cx, y0 + H * 0.09); set(7, cx + H * 0.04, y0 + H * 0.08); set(8, cx - H * 0.04, y0 + H * 0.08);
+    set(11, cx + H * 0.11, y0 + H * 0.2); set(12, cx - H * 0.11, y0 + H * 0.2); set(13, cx + H * 0.14, y0 + H * 0.36); set(14, cx - H * 0.14, y0 + H * 0.36);
+    set(15, cx + H * 0.15, y0 + H * 0.5); set(16, cx - H * 0.15, y0 + H * 0.5); set(23, cx + H * 0.07, y0 + H * 0.52); set(24, cx - H * 0.07, y0 + H * 0.52);
+    set(25, cx + H * 0.08, y0 + H * 0.73); set(26, cx - H * 0.08, y0 + H * 0.73); set(27, cx + H * 0.08, y0 + H * 0.94); set(28, cx - H * 0.08, y0 + H * 0.94);
+    return { w: im.width, h: im.height, pts: P, estimated: true };
+  }
+  async function detectRig(mediaId) {
+    const im = imgCache[mediaId];
+    try {
+      const pose = await loadPose();
+      const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+      const x = c.getContext('2d'); x.fillStyle = '#808080'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0);
+      const r = pose.detectForVideo(c, nextTs()); const l = r.landmarks && r.landmarks[0];
+      if (l && [11, 12, 23, 24].every((i) => l[i].visibility === undefined || l[i].visibility > 0.3)) {
+        const P = []; for (const p of l) P.push(Math.round(p.x * im.width * 10) / 10, Math.round(p.y * im.height * 10) / 10);
+        return { w: im.width, h: im.height, pts: P, estimated: false };
+      }
+    } catch (e) { /* estimate */ }
+    return estimateRig(im);
+  }
+
+  // ----- motion frames -----
+  const MIRROR = (j) => (j >= 11 && j <= 32 ? (j % 2 ? j + 1 : j - 1) : j === 7 ? 8 : j === 8 ? 7 : j);
+  function motionFrame(data, idx, mirror, three) {
+    const n = data.frames.length; if (!n) return null;
+    const out = []; for (let j = 0; j < 33; j++) out.push([0, 0, 0]);
+    let tot = 0;
+    for (let k = -2; k <= 2; k++) {
+      const f = data.frames[(((idx + k) % n) + n) % n]; if (!f) continue;
+      const w = k === 0 ? 2 : 1;
+      for (let j = 0; j < 33; j++) {
+        const s2 = mirror ? MIRROR(j) : j;
+        const xx = mirror ? -f[s2 * 3] : f[s2 * 3];
+        out[j][0] += xx * w; out[j][1] += (three ? -f[s2 * 3 + 1] : f[s2 * 3 + 1]) * w; out[j][2] += (three ? -f[s2 * 3 + 2] : f[s2 * 3 + 2]) * w;
+      }
+      tot += w;
+    }
+    if (!tot) return null;
+    return out.map((p) => [p[0] / tot, p[1] / tot, p[2] / tot]);
+  }
+
+  // ----- 2D puppet (WebGL) -----
+  const v2 = { add: (a, b) => [a[0] + b[0], a[1] + b[1]], sub: (a, b) => [a[0] - b[0], a[1] - b[1]], mul: (a, k) => [a[0] * k, a[1] * k], mid: (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], len: (a) => Math.hypot(a[0], a[1]), ang: (a) => Math.atan2(a[1], a[0]), rot: (p, t) => [p[0] * Math.cos(t) - p[1] * Math.sin(t), p[0] * Math.sin(t) + p[1] * Math.cos(t)] };
+  const segDist = (p, a, b) => { const ab = v2.sub(b, a); const t = clamp(((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / Math.max(1e-6, ab[0] * ab[0] + ab[1] * ab[1]), 0, 1); return v2.len(v2.sub(p, v2.add(a, v2.mul(ab, t)))); };
+  const inPoly = (p, q) => { let ins = false; for (let i = 0, j = q.length - 1; i < q.length; j = i++) if ((q[i][1] > p[1]) !== (q[j][1] > p[1]) && p[0] < ((q[j][0] - q[i][0]) * (p[1] - q[i][1])) / (q[j][1] - q[i][1]) + q[i][0]) ins = !ins; return ins; };
+  const puppetCache = new Map();
+  function buildPuppet(im, rig) {
+    const P = []; for (let j = 0; j < 33; j++) P.push([rig.pts[j * 2], rig.pts[j * 2 + 1]]);
+    const midHip = v2.mid(P[23], P[24]), midSh = v2.mid(P[11], P[12]);
+    const ext = (a, b, k) => v2.add(b, v2.mul(v2.sub(b, a), k));
+    const head = v2.add(P[0], v2.mul(v2.sub(P[0], midSh), 0.9));
+    const seg = [[midHip, midSh], [midSh, head], [P[11], P[13]], [P[13], ext(P[13], P[15], 0.35)], [P[12], P[14]], [P[14], ext(P[14], P[16], 0.35)], [P[23], P[25]], [P[25], ext(P[25], P[27], 0.25)], [P[24], P[26]], [P[26], ext(P[26], P[28], 0.25)]];
+    const height = Math.max(1, Math.max(P[27][1], P[28][1]) - head[1]);
+    const w = im.width, h = im.height;
+    const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(im, 0, 0);
+    const alpha = c.getContext('2d').getImageData(0, 0, w, h).data;
+    const A = (x, y) => alpha[(Math.min(h - 1, Math.max(0, Math.round(y))) * w + Math.min(w - 1, Math.max(0, Math.round(x)))) * 4 + 3];
+    const step = Math.max(3, Math.round(Math.max(w, h) / 70)), cols = Math.ceil(w / step) + 1, rows = Math.ceil(h / step) + 1;
+    const vid = new Int32Array(cols * rows).fill(-1), rest = [], idx = [];
+    const vert = (cc, r) => { const kk = r * cols + cc; if (vid[kk] < 0) { vid[kk] = rest.length / 2; rest.push(Math.min(w, cc * step), Math.min(h, r * step)); } return vid[kk]; };
+    for (let r = 0; r < rows - 1; r++) for (let cc = 0; cc < cols - 1; cc++) {
+      const x = cc * step, y = r * step;
+      if (!(A(x + step / 2, y + step / 2) > 10 || A(x, y) > 10 || A(x + step, y) > 10 || A(x, y + step) > 10 || A(x + step, y + step) > 10)) continue;
+      const a = vert(cc, r), b = vert(cc + 1, r), d = vert(cc, r + 1), e = vert(cc + 1, r + 1);
+      idx.push(a, d, b, b, d, e);
+    }
+    const n = rest.length / 2, uv = new Float32Array(n * 2), weights = new Float32Array(n * 10);
+    const sigma = height * 0.05, torso = [P[11], P[12], P[24], P[23]];
+    for (let i = 0; i < n; i++) {
+      const p = [rest[i * 2], rest[i * 2 + 1]]; uv[i * 2] = p[0] / w; uv[i * 2 + 1] = p[1] / h;
+      const ws = seg.map(([s0, s1]) => Math.exp(-Math.pow(segDist(p, s0, s1) / sigma, 2)) + 1e-9);
+      if (inPoly(p, torso)) ws[0] *= 6;
+      const ord = ws.map((x, k) => [x, k]).sort((a, b) => b[0] - a[0]);
+      const sum = ord[0][0] + ord[1][0] + ord[2][0];
+      for (let k = 0; k < 3; k++) weights[i * 10 + ord[k][1]] = ord[k][0] / sum;
+    }
+    return { P, rest: new Float32Array(rest), uv, idx: new Uint16Array(idx), weights, w, h, n };
+  }
+  const xf = (t, a0, a1) => ({ t, a0, a1 });
+  const ap = (x, p) => v2.add(x.a1, v2.rot(v2.sub(p, x.a0), x.t));
+  function solvePuppet(pp, m) {
+    const P = pp.P, mHip0 = v2.mid(P[23], P[24]), mSh0 = v2.mid(P[11], P[12]);
+    const mHip = v2.mid(m[23], m[24]), mSh = v2.mid(m[11], m[12]), mHead = v2.mid(m[7], m[8]);
+    const torso = xf(v2.ang(v2.sub(mSh, mHip)) - v2.ang(v2.sub(mSh0, mHip0)), mHip0, mHip0);
+    const head = xf(v2.ang(v2.sub(mHead, mSh)) - v2.ang(v2.sub(v2.mid(P[7], P[8]), mSh0)), mSh0, ap(torso, mSh0));
+    const limb = (a, b, start, f, t) => xf(v2.ang(v2.sub(m[t], m[f])) - v2.ang(v2.sub(P[b], P[a])), P[a], start);
+    const lU = limb(11, 13, ap(torso, P[11]), 11, 13), lF = limb(13, 15, ap(lU, P[13]), 13, 15);
+    const rU = limb(12, 14, ap(torso, P[12]), 12, 14), rF = limb(14, 16, ap(rU, P[14]), 14, 16);
+    const lT = limb(23, 25, ap(torso, P[23]), 23, 25), lS = limb(25, 27, ap(lT, P[25]), 25, 27);
+    const rT = limb(24, 26, ap(torso, P[24]), 24, 26), rS = limb(26, 28, ap(rT, P[26]), 26, 28);
+    const all = [torso, head, lU, lF, rU, rF, lT, lS, rT, rS];
+    const dy = Math.max(P[27][1], P[28][1]) - Math.max(ap(lS, P[27])[1], ap(rS, P[28])[1]);
+    return all.map((x) => ({ t: x.t, a0: x.a0, a1: [x.a1[0], x.a1[1] + dy] }));
+  }
+  let GLX = null;
+  function puppetGL() {
+    if (GLX) return GLX;
+    const c = document.createElement('canvas');
+    const g = c.getContext('webgl', { premultipliedAlpha: false, preserveDrawingBuffer: true, alpha: true, antialias: true });
+    if (!g) return null;
+    const sh = (type, src) => { const s = g.createShader(type); g.shaderSource(s, src); g.compileShader(s); return s; };
+    const prog = g.createProgram();
+    g.attachShader(prog, sh(g.VERTEX_SHADER, 'attribute vec2 p;attribute vec2 uv;varying vec2 v;void main(){v=uv;gl_Position=vec4(p,0.0,1.0);}'));
+    g.attachShader(prog, sh(g.FRAGMENT_SHADER, 'precision mediump float;varying vec2 v;uniform sampler2D t;void main(){gl_FragColor=texture2D(t,v);}'));
+    g.linkProgram(prog);
+    GLX = { c, g, prog, aP: g.getAttribLocation(prog, 'p'), aUV: g.getAttribLocation(prog, 'uv'), bP: g.createBuffer(), bUV: g.createBuffer(), bI: g.createBuffer(), tex: new Map() };
+    return GLX;
+  }
+  function renderPuppet(o, im, lt) {
+    const X = puppetGL(); if (!X) return null;
+    const key = o.mediaId + ':' + o.rig.pts.slice(22, 30).join(',');
+    let pp = puppetCache.get(key);
+    if (!pp) { pp = buildPuppet(im, o.rig); puppetCache.set(key, pp); }
+    const data = motionCache[o.motionId];
+    const m = data ? motionFrame(data, Math.round((lt + (o.offset || 0)) * data.fps), o.mirror, false) : null;
+    const xfs = m ? solvePuppet(pp, m) : null;
+    const k = Math.min(1, 900 / Math.max(pp.w, pp.h));
+    const Wc = Math.ceil(pp.w * 2.2 * k), Hc = Math.ceil(pp.h * 1.5 * k);
+    const { c, g } = X;
+    if (c.width !== Wc || c.height !== Hc) { c.width = Wc; c.height = Hc; }
+    g.viewport(0, 0, Wc, Hc); g.clearColor(0, 0, 0, 0); g.clear(g.COLOR_BUFFER_BIT);
+    g.useProgram(X.prog); g.enable(g.BLEND); g.blendFunc(g.SRC_ALPHA, g.ONE_MINUS_SRC_ALPHA);
+    let tex = X.tex.get(o.mediaId);
+    if (!tex) {
+      tex = g.createTexture(); g.bindTexture(g.TEXTURE_2D, tex);
+      g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
+      g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
+      g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, g.RGBA, g.UNSIGNED_BYTE, im); X.tex.set(o.mediaId, tex);
+    }
+    g.bindTexture(g.TEXTURE_2D, tex);
+    const pos = new Float32Array(pp.n * 2);
+    for (let i = 0; i < pp.n; i++) {
+      const p = [pp.rest[i * 2], pp.rest[i * 2 + 1]]; let x = p[0], y = p[1];
+      if (xfs) { x = 0; y = 0; for (let b = 0; b < 10; b++) { const w = pp.weights[i * 10 + b]; if (!w) continue; const q = ap(xfs[b], p); x += q[0] * w; y += q[1] * w; } }
+      const px = (x + pp.w * 0.6) * k, py = (y + pp.h * 0.3) * k;
+      pos[i * 2] = (px / Wc) * 2 - 1; pos[i * 2 + 1] = 1 - (py / Hc) * 2;
+    }
+    g.bindBuffer(g.ARRAY_BUFFER, X.bP); g.bufferData(g.ARRAY_BUFFER, pos, g.DYNAMIC_DRAW); g.enableVertexAttribArray(X.aP); g.vertexAttribPointer(X.aP, 2, g.FLOAT, false, 0, 0);
+    g.bindBuffer(g.ARRAY_BUFFER, X.bUV); g.bufferData(g.ARRAY_BUFFER, pp.uv, g.STATIC_DRAW); g.enableVertexAttribArray(X.aUV); g.vertexAttribPointer(X.aUV, 2, g.FLOAT, false, 0, 0);
+    g.bindBuffer(g.ELEMENT_ARRAY_BUFFER, X.bI); g.bufferData(g.ELEMENT_ARRAY_BUFFER, pp.idx, g.STATIC_DRAW);
+    g.drawElements(g.TRIANGLES, pp.idx.length, g.UNSIGNED_SHORT, 0);
+    return { canvas: c, w: pp.w, h: pp.h };
+  }
+
+  // ----- overlays (characters placed on a scene) -----
+  const ENTERS = [['pop', 'Bật ra'], ['fade', 'Hiện dần'], ['slideLeft', 'Trượt từ trái'], ['slideRight', 'Trượt từ phải'], ['slideUp', 'Trồi lên'], ['none', 'Có sẵn']];
+  const IDLES = [['none', 'Đứng yên'], ['bob', 'Nhún nhẹ'], ['breathe', 'Thở'], ['sway', 'Lắc lư']];
+  const newOverlay = (mediaId) => ({ id: uid(), mediaId, x: 0.72, y: 0.96, h: 0.7, rot: 0, flip: false, shadow: true, bright: 1, enter: 'pop', idle: 'none', motionId: null, rig: null, offset: 0, mirror: false });
+  function drawOverlays(g, s, lt, W, H) {
+    if (!s.overlays || !s.overlays.length) return;
+    for (const o of s.overlays) {
+      const im = imgCache[o.mediaId]; if (!im) continue;
+      const e = clamp((lt - 0.1) / 0.5, 0, 1), sp = 1 - Math.pow(1 - e, 3);
+      let alpha = 1, sc = 1, dx = 0, dy = 0, rot = o.rot;
+      if (o.enter === 'pop') { sc = 0.6 + 0.4 * (1 - Math.pow(1 - e, 3) * Math.cos(e * 7)); alpha = clamp(e * 2, 0, 1); }
+      else if (o.enter === 'fade') alpha = sp;
+      else if (o.enter === 'slideLeft') dx = (1 - sp) * -W * 0.6;
+      else if (o.enter === 'slideRight') dx = (1 - sp) * W * 0.6;
+      else if (o.enter === 'slideUp') dy = (1 - sp) * H * 0.5;
+      if (o.idle === 'bob') dy += Math.sin(lt * Math.PI * 1.2) * H * 0.012;
+      else if (o.idle === 'breathe') sc *= 1 + Math.sin(lt * Math.PI * 0.8) * 0.015;
+      else if (o.idle === 'sway') rot += Math.sin(lt * Math.PI * 0.9) * 3;
+      const hp = o.h * H;
+      g.save();
+      g.globalAlpha *= alpha;
+      g.filter = `brightness(${o.bright})` + (o.shadow ? ` drop-shadow(0 ${Math.round(hp * 0.02)}px ${Math.round(hp * 0.04)}px rgba(0,0,0,0.55))` : '');
+      g.translate(o.x * W + dx, o.y * H + dy); g.rotate((rot * Math.PI) / 180); g.scale(sc, sc);
+      const puppet = o.motionId && o.rig && motionCache[o.motionId] ? renderPuppet(o, im, lt) : null;
+      if (puppet) {
+        const s2 = hp / puppet.h; if (o.flip) g.scale(-1, 1);
+        g.drawImage(puppet.canvas, -puppet.w * 1.1 * s2, -puppet.h * 1.3 * s2, puppet.w * 2.2 * s2, puppet.h * 1.5 * s2);
+      } else {
+        const w = (hp * im.width) / im.height; if (o.flip) g.scale(-1, 1);
+        g.drawImage(im, -w / 2, -hp, w, hp);
+      }
+      g.filter = 'none';
+      g.restore();
+    }
+  }
+
+  // ----- 3D character (three.js r147 + Blender GLB) -----
+  const loadScript = (src) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Không tải được thư viện 3D')); document.head.appendChild(s); });
+  const loadThree = () => once('three', async () => {
+    const base = 'https://cdn.jsdelivr.net/npm/three@0.147.0/';
+    if (!window.THREE) await loadScript(base + 'build/three.min.js');
+    if (!window.THREE.GLTFLoader) await loadScript(base + 'examples/js/loaders/GLTFLoader.js');
+    if (!window.THREE.SkeletonUtils) await loadScript(base + 'examples/js/utils/SkeletonUtils.js');
+    const T = window.THREE;
+    const glb = await fetchBytes('characters/flow-character.glb.b64.txt');
+    const gltf = await new Promise((res, rej) => new T.GLTFLoader().parse(glb.buffer, '', res, () => rej(new Error('Không đọc được nhân vật 3D'))));
+    const renderer = new T.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+    renderer.outputEncoding = T.sRGBEncoding; renderer.setClearColor(0x000000, 0);
+    const scene = new T.Scene();
+    scene.add(new T.AmbientLight(0xffffff, 0.6));
+    const d1 = new T.DirectionalLight(0xffffff, 1.3); d1.position.set(2, 4, 3); scene.add(d1);
+    const d2 = new T.DirectionalLight(0x8fb7ff, 0.5); d2.position.set(-3, 2, -2); scene.add(d2);
+    scene.add(new T.GridHelper(6, 24, 0x666666, 0x333333));
+    const camera = new T.PerspectiveCamera(35, 16 / 9, 0.05, 100);
+    const rig = buildRig3D(T, gltf.scene, 1.75); scene.add(rig.root);
+    AI.three = { T, renderer, scene, camera, rig };
+    return AI.three;
+  });
+  const NAMES3 = { hips: ['hips', 'pelvis'], spine: ['spine'], chest: ['chest', 'spine2', 'upperchest', 'spine1'], neck: ['neck'], head: ['head'], headTop: ['headtop', 'headtopend'],
+    lUpperArm: ['leftupperarm', 'leftarm'], lLowerArm: ['leftlowerarm', 'leftforearm'], lHand: ['lefthand'], lHandTip: ['lefthandtip', 'lefthandmiddle1'],
+    rUpperArm: ['rightupperarm', 'rightarm'], rLowerArm: ['rightlowerarm', 'rightforearm'], rHand: ['righthand'], rHandTip: ['righthandtip', 'righthandmiddle1'],
+    lUpperLeg: ['leftupperleg', 'leftupleg'], lLowerLeg: ['leftlowerleg', 'leftleg'], lFoot: ['leftfoot'], lToe: ['lefttoe', 'lefttoebase'],
+    rUpperLeg: ['rightupperleg', 'rightupleg'], rLowerLeg: ['rightlowerleg', 'rightleg'], rFoot: ['rightfoot'], rToe: ['righttoe', 'righttoebase'] };
+  function buildRig3D(T, source, height) {
+    const model = T.SkeletonUtils.clone(source), root = new T.Group(); root.add(model);
+    model.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
+    root.updateMatrixWorld(true);
+    const box = new T.Box3().setFromObject(model), size = box.getSize(new T.Vector3()), sc = size.y > 0 ? height / size.y : 1;
+    root.scale.setScalar(sc); root.position.set((-(box.min.x + box.max.x) / 2) * sc, -box.min.y * sc, (-(box.min.z + box.max.z) / 2) * sc); root.updateMatrixWorld(true);
+    const all = []; model.traverse((o) => { if (o.isBone) all.push(o); });
+    const norm = (n) => n.toLowerCase().replace(/^mixamorig[:_]?/, '').replace(/[^a-z0-9]/g, '');
+    const bones = {}; for (const k of Object.keys(NAMES3)) for (const c of NAMES3[k]) { const b = all.find((x) => norm(x.name) === c); if (b) { bones[k] = b; break; } }
+    const restLocal = new Map(all.map((b) => [b, b.quaternion.clone()]));
+    const rq = {}, rp = {}; for (const k of Object.keys(bones)) { rq[k] = bones[k].getWorldQuaternion(new T.Quaternion()); rp[k] = bones[k].getWorldPosition(new T.Vector3()); }
+    return { T, root, bones, restLocal, rq, rp, baseY: root.position.y, hipH: rp.hips ? rp.hips.y - Math.min(rp.lFoot ? rp.lFoot.y : 0, rp.rFoot ? rp.rFoot.y : 0) : 0.9 };
+  }
+  function applyPose3D(rig, pose) {
+    const { T, bones, rq, rp } = rig;
+    for (const [b, q] of rig.restLocal) b.quaternion.copy(q);
+    rig.root.position.y = rig.baseY; rig.root.updateMatrixWorld(true);
+    const V = (i) => new T.Vector3(pose[i][0], pose[i][1], pose[i][2]);
+    const mid3 = (a, b) => V(a).add(V(b)).multiplyScalar(0.5);
+    const basis = (r, u) => { const x = r.clone().normalize(), z = new T.Vector3().crossVectors(x, u).normalize(), y = new T.Vector3().crossVectors(z, x).normalize(); return new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(x, y, z)); };
+    const setW = (b, w) => { const pq = b.parent ? b.parent.getWorldQuaternion(new T.Quaternion()) : new T.Quaternion(); b.quaternion.copy(pq.invert().multiply(w)); b.updateMatrixWorld(true); };
+    const has = (...k) => k.every((x) => bones[x]);
+    const hip = mid3(23, 24), sh = mid3(11, 12), headC = mid3(7, 8).lerp(V(0), 0.3), up = sh.clone().sub(hip);
+    if (has('hips', 'lUpperLeg', 'rUpperLeg', 'chest')) setW(bones.hips, basis(V(23).sub(V(24)), up).multiply(basis(rp.lUpperLeg.clone().sub(rp.rUpperLeg), rp.chest.clone().sub(rp.hips)).invert()).multiply(rq.hips));
+    if (has('chest', 'lUpperArm', 'rUpperArm', 'neck', 'spine')) setW(bones.chest, basis(V(11).sub(V(12)), up).multiply(basis(rp.lUpperArm.clone().sub(rp.rUpperArm), rp.neck.clone().sub(rp.spine)).invert()).multiply(rq.chest));
+    if (has('neck', 'head')) setW(bones.neck, new T.Quaternion().setFromUnitVectors(rp.head.clone().sub(rp.neck).normalize(), headC.clone().sub(sh).normalize()).multiply(rq.neck));
+    if (has('head', 'headTop')) setW(bones.head, basis(V(7).sub(V(8)), headC.clone().sub(sh)).multiply(basis(new T.Vector3(1, 0, 0), rp.headTop.clone().sub(rp.head)).invert()).multiply(rq.head));
+    const L = [['lUpperArm', 'lLowerArm', 11, 13], ['lLowerArm', 'lHand', 13, 15], ['rUpperArm', 'rLowerArm', 12, 14], ['rLowerArm', 'rHand', 14, 16],
+      ['lUpperLeg', 'lLowerLeg', 23, 25], ['lLowerLeg', 'lFoot', 25, 27], ['lFoot', 'lToe', 27, 31], ['rUpperLeg', 'rLowerLeg', 24, 26], ['rLowerLeg', 'rFoot', 26, 28], ['rFoot', 'rToe', 28, 32]];
+    for (const [b, c, a, z] of L) {
+      if (!has(b, c)) continue;
+      const d = V(z).sub(V(a)); if (d.lengthSq() < 1e-8) continue;
+      setW(bones[b], new T.Quaternion().setFromUnitVectors(rp[c].clone().sub(rp[b]).normalize(), d.normalize()).multiply(rq[b]));
+    }
+    const low = Math.min(pose[27][1], pose[28][1], pose[29][1], pose[30][1], pose[31][1], pose[32][1]);
+    const drop = Math.max(-0.9 * rig.hipH, Math.min(0, (hip.y - low) * (rig.hipH / 0.95) - rig.hipH));
+    rig.root.position.y = rig.baseY + drop; rig.root.updateMatrixWorld(true);
+  }
+  function drawChar3D(g, s, lt, W, H) {
+    drawBgCentered(g, s, W, H);
+    if (!AI.three) {
+      loadThree().then(() => draw()).catch((e) => setStatus('Không tải được nhân vật 3D: ' + e.message, 'err'));
+      g.fillStyle = '#9c938a'; g.font = `500 ${Math.round(H / 28)}px ${FONT}`; g.textAlign = 'center'; g.fillText('Đang tải nhân vật 3D…', 0, 0);
+      return;
+    }
+    const { renderer, scene, camera, rig } = AI.three;
+    const data = motionCache[s.mediaId];
+    const ch = s.char || { cam: 20, mirror: false };
+    const pose = data ? motionFrame(data, Math.round((s.trimStart + lt) * data.fps), ch.mirror, true) : null;
+    if (pose) applyPose3D(rig, pose);
+    const cvs = renderer.domElement;
+    if (cvs.width !== W || cvs.height !== H) renderer.setSize(W, H, false);
+    camera.aspect = W / H; camera.updateProjectionMatrix();
+    const a = (ch.cam * Math.PI) / 180;
+    camera.position.set(Math.sin(a) * 3.7, 1.1, Math.cos(a) * 3.7); camera.lookAt(0, 0.95, 0);
+    renderer.render(scene, camera);
+    g.drawImage(cvs, -W / 2, -H / 2, W, H);
+  }
+
+  async function prepareAI() {
+    if (state.scenes.some((s) => s.removeBg)) await loadSeg();
+    if (state.scenes.some((s) => { const m = mediaById(s.mediaId); return m && m.kind === 'motion'; })) await loadThree();
+  }
+
+  // ----- inspector sections -----
+  function aiSections(s, m) {
+    const isMotion = m && m.kind === 'motion';
+    const imgs = state.media.filter((x) => x.kind === 'image').sort((a, b) => (b.cutout ? 1 : 0) - (a.cutout ? 1 : 0));
+    const bg = s.bg || { type: 'color', color: '#1d2430', mediaId: null };
+    const bgSel = bg.type === 'media' ? bg.mediaId : 'color';
+    let html = '';
+    if (isMotion) {
+      const ch = s.char || { cam: 20, mirror: false };
+      html += `<section><span class="eyebrow">Nhân vật 3D (Blender)</span>
+        <div class="rng"><div class="row"><span class="lbl">Góc máy</span><span class="tc" id="x-camV">${ch.cam}°</span></div><input type="range" id="x-cam" min="-180" max="180" step="5" value="${ch.cam}"></div>
+        <div class="row"><label for="x-mirror">Đảo trái phải</label><input type="checkbox" id="x-mirror" ${ch.mirror ? 'checked' : ''}></div></section>`;
+    } else {
+      html += `<section><span class="eyebrow">Tách nền người</span>
+        <div class="row"><label for="x-rmbg">Tách người, thay nền</label><input type="checkbox" id="x-rmbg" ${s.removeBg ? 'checked' : ''}></div>
+        ${s.removeBg ? '<span class="lbl">Tách nền từng khung hình bằng AI ngay trong trình duyệt (tốt nhất với người).</span>' : ''}</section>`;
+    }
+    if (isMotion || s.removeBg) {
+      html += `<section><span class="eyebrow">Nền phía sau</span>
+        <div class="row"><label for="x-bgsel">Nền</label><select class="sel" id="x-bgsel"><option value="color"${bgSel === 'color' ? ' selected' : ''}>Màu trơn</option>${imgs.filter((x) => !x.cutout).map((x) => `<option value="${x.id}"${bgSel === x.id ? ' selected' : ''}>Ảnh: ${esc(x.name.slice(0, 22))}</option>`).join('')}</select></div>
+        ${bg.type !== 'media' ? `<div class="row"><label for="x-bgcolor">Màu nền</label><input type="color" id="x-bgcolor" value="${bg.color || '#1d2430'}"></div>` : ''}</section>`;
+    }
+    const motions = state.media.filter((x) => x.kind === 'motion');
+    html += `<section><span class="eyebrow">Nhân vật đặt vào cảnh</span>
+      <div class="row"><label for="x-addov">Thêm nhân vật</label><select class="sel" id="x-addov"><option value="">${imgs.length ? 'Chọn ảnh…' : 'Chưa có ảnh'}</option>${imgs.map((x) => `<option value="${x.id}">${x.cutout ? '[Đã tách nền] ' : ''}${esc(x.name.replace(' (đã tách nền)', '').slice(0, 24))}</option>`).join('')}</select></div>
+      ${imgs.some((x) => x.cutout) ? '' : '<span class="lbl">Mẹo: bấm nút kéo trên một ảnh trong Thư viện để tách nền nhân vật trước.</span>'}
+      ${(s.overlays || []).map((o, i) => {
+        const im = mediaById(o.mediaId); const open = openOv === o.id;
+        return `<div class="ov-item${open ? ' open' : ''}" data-oid="${o.id}">
+          <div class="row"><button class="ov-head" data-ovopen="${o.id}">${im ? `<img src="${im.url}" alt="" class="checker">` : ''} Nhân vật ${i + 1}${o.motionId ? ' · cử động' : ''}</button><button class="ibtn danger" data-ovdel="${o.id}" aria-label="Bỏ nhân vật"><svg class="i"><use href="#i-trash"/></svg></button></div>
+          ${open ? `
+          ${[['x', 'Ngang', 0, 1, 0.01, '%'], ['y', 'Dọc (chân)', 0.1, 1.2, 0.01, '%'], ['h', 'Cao', 0.1, 1.5, 0.01, '%'], ['rot', 'Xoay', -45, 45, 1, '°'], ['bright', 'Độ sáng', 0.5, 1.5, 0.05, '%']].map(([k, l, mn, mx, st, u]) => `
+          <div class="rng"><div class="row"><span class="lbl">${l}</span><span class="tc" data-ovv="${k}">${u === '%' ? Math.round(o[k] * 100) + '%' : o[k] + u}</span></div><input type="range" data-ovk="${k}" data-oid="${o.id}" min="${mn}" max="${mx}" step="${st}" value="${o[k]}"></div>`).join('')}
+          <div class="row"><label>Làm theo chuyển động</label><select class="sel" data-ovk="motionId" data-oid="${o.id}"><option value="">${motions.length ? 'Không (ảnh tĩnh)' : 'Chưa có chuyển động'}</option>${motions.map((x) => `<option value="${x.id}"${o.motionId === x.id ? ' selected' : ''}>${esc(x.name.replace('Chuyển động: ', '').slice(0, 22))}</option>`).join('')}</select></div>
+          ${o.motionId && o.rig ? `<span class="lbl">${o.rig.estimated ? 'Không nhận ra dáng người trong ảnh, đang dùng khung xương ước lượng (đứng thẳng, tay buông).' : 'Đã nhận ra dáng nhân vật trong ảnh.'}</span>
+          <div class="rng"><div class="row"><span class="lbl">Bắt đầu từ giây</span><span class="tc" data-ovv="offset">${(o.offset || 0).toFixed(1)}s</span></div><input type="range" data-ovk="offset" data-oid="${o.id}" min="0" max="${Math.max(0.1, ((mediaById(o.motionId) || {}).duration || 1) - 0.1).toFixed(1)}" step="0.1" value="${o.offset || 0}"></div>
+          <div class="row"><label>Đảo trái phải động tác</label><input type="checkbox" data-ovk="mirror" data-oid="${o.id}" ${o.mirror ? 'checked' : ''}></div>` : ''}
+          ${!motions.length ? '<span class="lbl">Học chuyển động từ một video trong Thư viện (nút hình người) để nhân vật cử động.</span>' : ''}
+          <div class="row"><label>Xuất hiện</label><select class="sel" data-ovk="enter" data-oid="${o.id}">${opts(ENTERS, o.enter)}</select></div>
+          <div class="row"><label>Chuyển động nhẹ</label><select class="sel" data-ovk="idle" data-oid="${o.id}">${opts(IDLES, o.idle)}</select></div>
+          <div class="row"><label>Bóng đổ</label><input type="checkbox" data-ovk="shadow" data-oid="${o.id}" ${o.shadow ? 'checked' : ''}></div>
+          <div class="row"><label>Lật ngang</label><input type="checkbox" data-ovk="flip" data-oid="${o.id}" ${o.flip ? 'checked' : ''}></div>` : ''}
+        </div>`;
+      }).join('')}</section>`;
+    return html;
+  }
+  let openOv = null;
+  const ovOf = (s, oid) => (s.overlays || []).find((o) => o.id === oid);
+  $('inspBody').addEventListener('input', (e) => {
+    const s = sel(); if (!s) return; const t = e.target;
+    if (t.id === 'x-cam') { s.char = Object.assign({ cam: 20, mirror: false }, s.char, { cam: +t.value }); $('x-camV').textContent = t.value + '°'; changed(); return; }
+    if (t.id === 'x-bgcolor') { s.bg = Object.assign({ type: 'color' }, s.bg, { type: 'color', color: t.value }); changed(); return; }
+    const k = t.dataset.ovk; if (!k || t.type !== 'range') return;
+    const o = ovOf(s, t.dataset.oid); if (!o) return;
+    o[k] = +t.value;
+    const lab = t.closest('.rng').querySelector('[data-ovv]');
+    if (lab) lab.textContent = k === 'rot' ? o[k] + '°' : k === 'offset' ? o[k].toFixed(1) + 's' : Math.round(o[k] * 100) + '%';
+    changed();
+  });
+  $('inspBody').addEventListener('change', async (e) => {
+    const s = sel(); if (!s) return; const t = e.target;
+    if (t.id === 'x-mirror') { s.char = Object.assign({ cam: 20, mirror: false }, s.char, { mirror: t.checked }); changed(); return; }
+    if (t.id === 'x-rmbg') { s.removeBg = t.checked; if (!s.bg) s.bg = { type: 'color', color: '#1d2430', mediaId: null }; changed({ insp: true }); if (t.checked) loadSeg().then(() => draw()).catch((er) => setStatus('Không tải được AI tách nền: ' + er.message, 'err')); return; }
+    if (t.id === 'x-bgsel') { s.bg = t.value === 'color' ? { type: 'color', color: (s.bg && s.bg.color) || '#1d2430', mediaId: null } : { type: 'media', mediaId: t.value, color: (s.bg && s.bg.color) || '#1d2430' }; changed({ insp: true }); return; }
+    if (t.id === 'x-addov') { if (!t.value) return; const o = newOverlay(t.value); s.overlays = (s.overlays || []).concat([o]); openOv = o.id; changed({ insp: true }); seekToScene(state.scenes.indexOf(s)); return; }
+    const k = t.dataset.ovk; if (!k || t.type === 'range') return;
+    const o = ovOf(s, t.dataset.oid); if (!o) return;
+    if (t.type === 'checkbox') o[k] = t.checked;
+    else if (k === 'motionId') {
+      if (!t.value) { o.motionId = null; changed({ insp: true }); return; }
+      setStatus('Đang nhận dạng dáng nhân vật trong ảnh…');
+      if (!o.rig) o.rig = await detectRig(o.mediaId);
+      o.motionId = t.value; setStatus(o.rig.estimated ? 'Dùng khung xương ước lượng cho nhân vật.' : 'Đã nhận ra dáng nhân vật.', 'ok');
+      changed({ insp: true }); return;
+    } else o[k] = t.value;
+    changed();
+  });
+  $('inspBody').addEventListener('click', (e) => {
+    const s = sel(); if (!s) return;
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.ovopen) { openOv = openOv === b.dataset.ovopen ? null : b.dataset.ovopen; renderInsp(); }
+    if (b.dataset.ovdel) { s.overlays = (s.overlays || []).filter((o) => o.id !== b.dataset.ovdel); changed({ insp: true }); }
+  });
+
+
   // ---------- boot ----------
   async function boot() {
     let saved = null;
@@ -1007,10 +1571,14 @@ Quy tắc: chỉ dùng index có thật; một tệp có thể dùng nhiều l�
       state.media = examples; state.scenes = exampleScenes();
     }
     for (const m of state.media) {
-      if (m.kind !== 'video') continue;
-      try { const blob = await idb.get(m.id); if (blob) m.url = URL.createObjectURL(blob); } catch (e) { /* not stored */ }
+      if (m.kind !== 'video' && !m.idb) continue;
+      try {
+        const blob = await idb.get(m.id);
+        if (blob && m.kind === 'motion') { motionCache[m.id] = JSON.parse(await blob.text()); m.url = null; }
+        else if (blob) m.url = URL.createObjectURL(blob);
+      } catch (e) { /* not stored */ }
     }
-    state.media = state.media.filter((m) => m.kind !== 'video' || m.url);
+    state.media = state.media.filter((m) => (m.kind === 'motion' ? motionCache[m.id] : m.kind !== 'video' && !m.idb) || m.url);
     state.scenes = state.scenes.filter((s) => state.media.some((m) => m.id === s.mediaId));
     state.scenes.forEach((s) => { if (s.trimStart == null) s.trimStart = 0; if (s.volume == null) s.volume = 1; });
     $('title').value = state.title;
