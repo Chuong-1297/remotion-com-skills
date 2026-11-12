@@ -250,7 +250,9 @@ svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none;
           <button data-h="1080" aria-pressed="false">1080p</button>
         </div>
       </div>
-      <p>Video được ghi trực tiếp trong trình duyệt theo thời gian thực (mất đúng bằng độ dài video), kèm âm thanh của các clip và nhạc nền. Giữ tab này mở trong lúc ghi.</p>
+      <div class="row"><label for="exConvert">Chuyển sang MP4 chuẩn (H.264 + AAC)</label><input type="checkbox" id="exConvert" checked></div>
+      <p>Video được ghi trực tiếp trong trình duyệt theo thời gian thực (mất đúng bằng độ dài video), kèm âm thanh của các clip và nhạc nền. Khi bật MP4 chuẩn, FFmpeg (chạy ngay trong trang) mã hoá lại thành H.264 + AAC để phát được trên mọi máy và mạng xã hội. Giữ tab này mở trong lúc làm.</p>
+      <p class="lbl">Bộ chuyển đổi dùng FFmpeg và x264, giấy phép GPL.</p>
     </div>
     <div id="exRun" hidden style="display:grid;gap:8px">
       <div class="bar"><div id="exBar"></div></div>
@@ -957,14 +959,18 @@ Quy tắc: chỉ dùng index có thật; một tệp có thể dùng nhiều l�
   }
   $('exportBtn').addEventListener('click', openExport);
   $('exClose').addEventListener('click', () => { if (recording) { exCancel = true; return; } modal.hidden = true; applyAspect(); });
-  function pickMime() {
-    const list = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  function pickMime(convert) {
+    // When FFmpeg re-encodes afterwards, record WebM (VP8 decodes fastest); otherwise prefer native MP4.
+    const list = convert
+      ? ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm', 'video/mp4']
+      : ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
     if (typeof MediaRecorder === 'undefined') return null;
     for (const m of list) if (MediaRecorder.isTypeSupported(m)) return m;
     return '';
   }
   $('exStart').addEventListener('click', async () => {
-    const mime = pickMime();
+    const convert = $('exConvert').checked && typeof Worker !== 'undefined' && typeof WebAssembly !== 'undefined';
+    const mime = pickMime(convert);
     if (mime === null || !cv.captureStream) { $('exInfo').textContent = ''; setStatus('Trình duyệt này không hỗ trợ ghi video từ canvas. Hãy thử Chrome, Edge hoặc Firefox.', 'err'); modal.hidden = true; return; }
     const portrait = state.aspect === '9:16';
     const H = exHeight, W = Math.round(H * 16 / 9);
@@ -1004,8 +1010,26 @@ Quy tắc: chỉ dùng index có thật; một tệp có thể dùng nhiều l�
     const type = (mime || 'video/webm').split(';')[0];
     exExt = type === 'video/mp4' ? 'mp4' : 'webm';
     exBlob = new Blob(chunks, { type });
+    let note = '';
+    if (convert) {
+      $('exBar').style.width = '0%';
+      $('exMsg').textContent = 'Đang chuyển sang MP4 (H.264 + AAC) bằng FFmpeg…';
+      $('exClose').textContent = 'Huỷ';
+      recording = true; exCancel = false;
+      try {
+        const mp4 = await convertToMp4(exBlob, exExt, total, cv.height, (p) => {
+          $('exBar').style.width = Math.round(p * 100) + '%';
+          $('exMsg').textContent = `Đang chuyển sang MP4 (H.264 + AAC)… ${Math.round(p * 100)}%`;
+        });
+        if (mp4) { exBlob = mp4; exExt = 'mp4'; note = ' · H.264 + AAC'; }
+        else { recording = false; modal.hidden = true; applyAspect(); setStatus('Đã huỷ xuất video.'); return; }
+      } catch (e) {
+        note = ' · chưa chuyển được sang MP4 chuẩn (' + e.message + '), đang giữ bản ghi gốc';
+      }
+      recording = false;
+    }
     $('exVideo').src = URL.createObjectURL(exBlob);
-    $('exInfo').textContent = `${exExt.toUpperCase()} · ${cv.width}×${cv.height} · ${(exBlob.size / 1048576).toFixed(1)} MB`;
+    $('exInfo').textContent = `${exExt.toUpperCase()} · ${cv.width}×${cv.height} · ${(exBlob.size / 1048576).toFixed(1)} MB${note}`;
     $('exRun').hidden = true; $('exDone').hidden = false; $('exSave').hidden = false; $('exClose').textContent = 'Đóng';
     applyAspect();
   });
@@ -1558,6 +1582,33 @@ Quy tắc: chỉ dùng index có thật; một tệp có thể dùng nhiều l�
     if (b.dataset.ovdel) { s.overlays = (s.overlays || []).filter((o) => o.id !== b.dataset.ovdel); changed({ insp: true }); }
   });
 
+
+  // ---------- FFmpeg (WebAssembly) conversion to MP4 H.264 + AAC ----------
+  let convertWorker = null, convertSeq = 0;
+  function convertToMp4(blob, ext, duration, height, onProgress) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        if (!convertWorker) convertWorker = new Worker(rel('ffmpeg/convert-worker.js'));
+      } catch (e) { return reject(new Error('không khởi động được FFmpeg')); }
+      const id = ++convertSeq;
+      const cancelTimer = setInterval(() => {
+        if (exCancel) { clearInterval(cancelTimer); convertWorker.terminate(); convertWorker = null; resolve(null); }
+      }, 300);
+      const onMsg = (ev) => {
+        const m = ev.data; if (!m || m.id !== id) return;
+        if (m.type === 'progress') onProgress(m.value);
+        else {
+          clearInterval(cancelTimer); convertWorker.removeEventListener('message', onMsg);
+          if (m.type === 'done') { onProgress(1); resolve(new Blob([m.data], { type: 'video/mp4' })); }
+          else reject(new Error(m.message || 'FFmpeg báo lỗi'));
+        }
+      };
+      convertWorker.addEventListener('message', onMsg);
+      convertWorker.onerror = (e) => { clearInterval(cancelTimer); convertWorker = null; reject(new Error((e && e.message) || 'không tải được FFmpeg')); };
+      const data = await blob.arrayBuffer();
+      convertWorker.postMessage({ id, data, ext, duration, crf: height >= 1080 ? 22 : 23, preset: height >= 1080 ? 'superfast' : 'veryfast', audioKbps: 160 }, [data]);
+    });
+  }
 
   // ---------- boot ----------
   async function boot() {
